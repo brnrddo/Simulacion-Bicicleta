@@ -468,8 +468,9 @@ public class IntersectionLaneBuilderEditor : Editor
     // ------------------------------------------------------------
     // Conflictos
     // ------------------------------------------------------------
-    // Zona de conflicto: eje a eje a menos de esto = los autos se tocarian (2 x 0.925 m de medio ancho + 0.45 m de margen)
-    private const float ConflictNearM = 2.3f;
+    // Zona de conflicto: eje a eje a menos de esto = los vehiculos se tocarian. Desde 2026-11-04 incluye el bus:
+    // 1.275 m (medio ancho del bus) + 0.925 m (auto) + 0.6 m de margen. Antes 2.3 m (dos autos).
+    private const float ConflictNearM = 2.8f;
 
     private static int WriteConflicts(IntersectionLaneBuilder b, List<GenConn> conns, StringBuilder log)
     {

@@ -43,12 +43,19 @@ public class TrafficSpawner : MonoBehaviour
     [SerializeField] private int seedOffset = 1;
 
     public TrafficLane Lane => lane;
+    public IEnumerable<TrafficVehicle> Prefabs { get { foreach (var v in vehicles) if (v.prefab != null) yield return v.prefab; } }
     public int SpawnedCount { get; private set; }
     public int DroppedCount { get; private set; }
 
     private System.Random rng;
     private float timeToNextArrival;
     private int pending;
+    // Vehiculo y conductor de la proxima llegada: se sortean una vez y esperan hasta que haya espacio. Si se
+    // resorteaban en cada intento, con la entrada congestionada ganaban los mas cortos (sesgo de la mezcla).
+    private TrafficVehicle nextPrefab;
+    private DriverProfile nextProfile;
+    private IdmParams nextParams;
+    private float nextSpeedFactor;
 
     public float FlowVehPerHour
     {
@@ -108,8 +115,16 @@ public class TrafficSpawner : MonoBehaviour
         // Cantidad estable: no generar por encima del objetivo del nivel de trafico (la llegada queda pendiente)
         if (manager.ActiveCount >= manager.TargetVehicles) return false;
 
-        TrafficVehicle prefab = PickPrefab();
-        IdmParams p = driverProfile.Sample(rng, out float speedFactor);
+        if (nextPrefab == null)
+        {
+            nextPrefab = PickPrefab();
+            nextProfile = nextPrefab.ProfileOverride != null ? nextPrefab.ProfileOverride : driverProfile;  // p. ej. bus
+            nextParams = nextProfile.Sample(rng, out nextSpeedFactor);
+        }
+        TrafficVehicle prefab = nextPrefab;
+        DriverProfile profile = nextProfile;
+        IdmParams p = nextParams;
+        float speedFactor = nextSpeedFactor;
         float desired = lane.SpeedLimitMps * speedFactor;
         float halfLen = prefab.LengthM * 0.5f;
         float spawnS = halfLen;  // la cola del auto justo en el inicio del carril
@@ -150,9 +165,10 @@ public class TrafficSpawner : MonoBehaviour
         }
 
         var v = manager.SpawnVehicle(prefab, lane, spawnS, speed, p, speedFactor);
-        v.CriticalGapS = driverProfile.SampleCriticalGap(rng);
-        v.MinorStreetExtraGapS = driverProfile.minorStreetExtraGapS;
-        v.FollowBeforeOvertakeS = driverProfile.SampleFollowBeforeOvertake(rng);
+        v.CriticalGapS = profile.SampleCriticalGap(rng);
+        v.MinorStreetExtraGapS = profile.minorStreetExtraGapS;
+        v.FollowBeforeOvertakeS = profile.SampleFollowBeforeOvertake(rng);
+        nextPrefab = null;
         SpawnedCount++;
         return true;
     }

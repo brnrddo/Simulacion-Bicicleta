@@ -1,0 +1,5 @@
+Vehiculos de terceros usados por el trafico (2026-11-04):
+- QuaterniusCars/: "LowPoly Cars" (Realistic Car Pack, Nov 2018) de Quaternius, CC0. https://quaternius.itch.io/lowpoly-cars
+  Se usan NormalCar1, NormalCar2, SUV, Taxi y SportsCar2. (Cop y SportsCar quedan sin usar.)
+- MontrealBus/: "Montreal Bus" de Nick Ladd, CC BY 3.0 (atribucion obligatoria, ver LICENSE.txt). https://poly.pizza/m/fFCCghvRImG
+Los prefabs se generan con SimBici > Build Vehicle Prefabs (Assets/AssetsLab/Vehicles/).

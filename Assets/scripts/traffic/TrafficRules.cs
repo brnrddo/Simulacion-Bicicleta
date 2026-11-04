@@ -23,6 +23,25 @@ public enum ConflictMode { Yield, OccupancyOnly }
 
 public static class TrafficRules
 {
+    /// <summary>
+    /// Corte hacia adentro del eje trasero en una curva de radio R (vehiculo largo): R - sqrt(R^2 - L_e^2),
+    /// con L_e la distancia entre ejes. Si R &lt;= L_e, el vehiculo no puede seguir la curva (se devuelve L_e).
+    /// </summary>
+    public static float OffTrackingM(float radiusM, float wheelbaseM)
+    {
+        if (float.IsInfinity(radiusM)) return 0f;
+        return radiusM > wheelbaseM ? radiusM - Mathf.Sqrt(radiusM * radiusM - wheelbaseM * wheelbaseM) : wheelbaseM;
+    }
+
+    /// <summary>Radio de la circunferencia que pasa por tres puntos (en planta); infinito si estan alineados.</summary>
+    public static float CircumRadius(Vector3 a, Vector3 b, Vector3 c)
+    {
+        Vector2 p = new Vector2(a.x, a.z), q = new Vector2(b.x, b.z), r = new Vector2(c.x, c.z);
+        float ab = (p - q).magnitude, bc = (q - r).magnitude, ca = (r - p).magnitude;
+        float cross = Mathf.Abs((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+        return cross < 1e-5f ? float.PositiveInfinity : ab * bc * ca / (2f * cross);
+    }
+
     /// <summary>Velocidad maxima en curva: v = sqrt(a_lat * R).</summary>
     public static float CurveSpeedLimitMps(float minRadiusM, float lateralAccelMps2)
     {

@@ -155,6 +155,7 @@ public class TrafficManager : MonoBehaviour
 
     private System.Random routingRng;
     private System.Random startUpRng;
+    private System.Random colorRng;
     private System.Random overtakeRng;
     private readonly List<TrafficVehicle> opposingOvertakers = new List<TrafficVehicle>();
     private int nextId = 1;
@@ -181,6 +182,7 @@ public class TrafficManager : MonoBehaviour
         routingRng = CreateRng(0);
         startUpRng = CreateRng(1000);
         overtakeRng = CreateRng(2000);
+        colorRng = CreateRng(4000);   // colores de carroceria: no altera las otras secuencias
 
         // Semaforos: los avanza este manager dentro de su paso (sincronizados con los autos)
         intersections.AddRange(FindObjectsByType<IntersectionController>(FindObjectsSortMode.None));
@@ -206,13 +208,24 @@ public class TrafficManager : MonoBehaviour
 
         // Conectores hermanos: hasta donde se superponen sus trayectorias (antes se suponia 6 m; con las lineas de
         // detencion mas atras los conectores son mas largos y un recto y un giro comparten mas tramo)
+        // Vehiculos largos (bus): largo maximo de la mezcla y conectores donde caben sin pisar la vereda
+        maxVehicleLengthM = 4.5f;
+        TrafficVehicle longest = null;
+        foreach (var sp in spawners)
+            foreach (var pf in sp.Prefabs)
+            {
+                maxVehicleLengthM = Mathf.Max(maxVehicleLengthM, pf.LengthM);
+                if (pf.LengthM > LongVehicleMinLengthM && (longest == null || pf.LengthM > longest.LengthM)) longest = pf;
+            }
+        if (longest != null) ComputeLongVehicleConnectors(longest);
+
         foreach (var lane in lanes)
         {
             if (lane.IsConnector) continue;
             foreach (var a in lane.NextLanes)
                 foreach (var b in lane.NextLanes)
                     if (a.lane != null && b.lane != null && a.lane != b.lane && a.lane.IsConnector && b.lane.IsConnector)
-                        siblingOverlap[(a.lane, b.lane)] = SiblingOverlapLength(a.lane, b.lane);
+                        siblingOverlap[(a.lane, b.lane)] = SiblingOverlapLength(a.lane, b.lane, maxVehicleLengthM);
         }
 
         // Ciclista en la red: para que los giros le cedan el paso
@@ -345,10 +358,11 @@ public class TrafficManager : MonoBehaviour
 
                 if (v.NextLane == null) { toRemove.Add(v); break; }
 
+                v.PrevLane = from;
                 v.Lane = v.NextLane;
                 v.S = overflow;
                 v.NextLane = v.NextNextLane;
-                v.NextNextLane = v.NextLane != null ? v.NextLane.PickNext(routingRng) : null;
+                v.NextNextLane = v.NextLane != null ? PickNextFor(v, v.NextLane) : null;
                 v.Lane.Vehicles.Insert(0, v);  // recien entrado: es el de S mas bajo
 
                 if (v.Lane.IsConnector)
@@ -545,17 +559,8 @@ public class TrafficManager : MonoBehaviour
 
             // Autos que acaban de entrar a un carril siguiente (p. ej. un conector) con la cola todavia sobre este:
             // si este carril ya dio un obstaculo (linea, espera) el bucle termina aqui y no los veria
-            foreach (var nl in lane.NextLanes)
-            {
-                if (nl.lane == null) continue;
-                foreach (var o in nl.lane.Vehicles)
-                {
-                    if (o.S - o.LengthM * 0.5f >= 0f) break;                // lista ordenada por S
-                    if (o == v) continue;
-                    float g = offset + lane.LengthM + o.S - o.LengthM * 0.5f - selfFrontS;
-                    if (g > -v.LengthM && g < gap) { gap = Mathf.Max(g, 0f); leaderSpeed = o.Speed; leaderName = o.Label; }
-                }
-            }
+            // Hasta dos carriles adelante: la cola de un bus (12 m) puede cruzar un carril de llegada corto y llegar a este
+            OverhangLeaders(v, lane, offset + lane.LengthM, selfFrontS, 2, ref gap, ref leaderSpeed, ref leaderName);
 
             if (!float.IsPositiveInfinity(gap)) return;
 
@@ -592,14 +597,112 @@ public class TrafficManager : MonoBehaviour
     private const float SiblingOverlapM = 6f;
     private readonly Dictionary<(TrafficLane, TrafficLane), float> siblingOverlap = new Dictionary<(TrafficLane, TrafficLane), float>();
 
+    // ------------------------------------------------------------
+    // Vehiculos largos y colores
+    // ------------------------------------------------------------
+    private const float LongVehicleMinLengthM = 7f;
+    private const float LongVehicleCurbMarginM = 0.3f;
+    private float maxVehicleLengthM = 4.5f;
+    private readonly HashSet<TrafficLane> longVehicleConnectors = new HashSet<TrafficLane>();
+    private bool longVehicleChecked;
+
+    public float MaxVehicleLengthM => maxVehicleLengthM;
+    public bool LongVehicleFits(TrafficLane connector) => !longVehicleChecked || longVehicleConnectors.Contains(connector);
+
+    /// <summary>Elige el carril siguiente; un vehiculo largo solo entre los conectores donde cabe.</summary>
+    private TrafficLane PickNextFor(TrafficVehicle v, TrafficLane lane) =>
+        v.LengthM > LongVehicleMinLengthM && longVehicleChecked
+            ? lane.PickNext(routingRng, c => !c.IsConnector || longVehicleConnectors.Contains(c))
+            : lane.PickNext(routingRng);
+
+    /// <summary>
+    /// Conectores donde cabe un vehiculo largo sin pisar la vereda: en cada punto, la distancia del eje a la vereda
+    /// (NavMesh de peatones) debe superar su medio ancho + el corte hacia adentro del eje trasero en la curva,
+    /// R - sqrt(R^2 - L_e^2) (L_e = distancia entre ejes), + 0.3 m.
+    /// </summary>
+    private void ComputeLongVehicleConnectors(TrafficVehicle longest)
+    {
+        int vereda = UnityEngine.AI.NavMesh.GetAreaFromName("Vereda");
+        if (vereda < 0) return;   // sin NavMesh de peatones: no se restringe
+        int mask = 1 << vereda;
+        float half = longest.WidthM * 0.5f, wb = Mathf.Max(longest.WheelbaseM, longest.LengthM * 0.5f);
+        foreach (var lane in lanes)
+        {
+            if (!lane.IsConnector) continue;
+            float worst = float.PositiveInfinity;
+            for (float s = 1f; s < lane.LengthM - 1f; s += 0.5f)
+            {
+                lane.GetPose(s - 1f, 0f, out Vector3 p0, out _);
+                lane.GetPose(s, 0f, out Vector3 p1, out _);
+                lane.GetPose(s + 1f, 0f, out Vector3 p2, out _);
+                float offTrack = TrafficRules.OffTrackingM(TrafficRules.CircumRadius(p0, p1, p2), wb);
+                if (!UnityEngine.AI.NavMesh.SamplePosition(p1 + Vector3.up * 0.15f, out UnityEngine.AI.NavMeshHit hit, 8f, mask)) continue;
+                float clearance = new Vector2(hit.position.x - p1.x, hit.position.z - p1.z).magnitude;
+                worst = Mathf.Min(worst, clearance - half - offTrack);
+            }
+            if (worst >= LongVehicleCurbMarginM) longVehicleConnectors.Add(lane);
+        }
+        longVehicleChecked = true;
+    }
+
+    /// <summary>Lideres cuya cola sigue sobre 'lane' aunque su centro ya este en un carril siguiente (hasta 'depth' carriles).</summary>
+    private static void OverhangLeaders(TrafficVehicle v, TrafficLane lane, float offsetAtEnd, float selfFrontS, int depth,
+                                        ref float gap, ref float leaderSpeed, ref string leaderName)
+    {
+        foreach (var nl in lane.NextLanes)
+        {
+            if (nl.lane == null) continue;
+            foreach (var o in nl.lane.Vehicles)
+            {
+                if (o.S - o.LengthM * 0.5f >= 0f) break;   // lista ordenada por S
+                if (o == v) continue;
+                float g = offsetAtEnd + o.S - o.LengthM * 0.5f - selfFrontS;
+                if (g > -v.LengthM && g < gap) { gap = Mathf.Max(g, 0f); leaderSpeed = o.Speed; leaderName = o.Label; }
+            }
+            if (depth > 1 && nl.lane.LengthM < 15f)
+                OverhangLeaders(v, nl.lane, offsetAtEnd + nl.lane.LengthM, selfFrontS, depth - 1, ref gap, ref leaderSpeed, ref leaderName);
+        }
+    }
+
+    /// <summary>Un vehiculo cuyo centro ya salio de 'conn' tiene todavia la cola antes de sEnd (sigue ocupando la zona).</summary>
+    private static bool TailInZone(TrafficLane conn, float sEnd)
+    {
+        foreach (var nl in conn.NextLanes)
+        {
+            if (nl.lane == null) continue;
+            foreach (var o in nl.lane.Vehicles)
+            {
+                float rear = o.S - o.LengthM * 0.5f;
+                if (rear >= 0f) break;
+                if (conn.LengthM + rear < sEnd + 0.5f) return true;
+            }
+        }
+        return false;
+    }
+
+    // Colores de autos (aprox. del parque de Santiago): blanco, gris/plata, negro, gris oscuro, rojo, azul, beige. [VERIFICAR]
+    private static readonly (Color c, float w)[] BodyPalette =
+    {
+        (new Color(0.92f, 0.92f, 0.92f), 0.26f), (new Color(0.62f, 0.64f, 0.66f), 0.24f), (new Color(0.08f, 0.08f, 0.09f), 0.16f),
+        (new Color(0.30f, 0.31f, 0.33f), 0.12f), (new Color(0.60f, 0.08f, 0.08f), 0.10f), (new Color(0.10f, 0.20f, 0.45f), 0.08f),
+        (new Color(0.75f, 0.70f, 0.58f), 0.04f),
+    };
+
+    public static Color SampleBodyColor(System.Random rng)
+    {
+        double r = rng.NextDouble();
+        foreach (var (c, w) in BodyPalette) { r -= w; if (r <= 0) return c; }
+        return BodyPalette[0].c;
+    }
+
     private float SiblingOverlap(TrafficLane lane, TrafficLane sib) =>
         siblingOverlap.TryGetValue((lane, sib), out float d) ? d : SiblingOverlapM;
 
     /// <summary>
     /// Distancia desde el inicio hasta donde dos conectores hermanos quedan separados lo suficiente para que dos autos
-    /// no se toquen (centros a mas de 2.5 m), mas un largo de auto de margen.
+    /// no se toquen (centros a mas de 2.5 m), mas el largo del vehiculo mas largo de la mezcla de margen.
     /// </summary>
-    private static float SiblingOverlapLength(TrafficLane a, TrafficLane b)
+    private static float SiblingOverlapLength(TrafficLane a, TrafficLane b, float maxVehicleLength)
     {
         float len = Mathf.Min(a.LengthM, b.LengthM);
         for (float s = 0f; s <= len; s += 0.5f)
@@ -607,7 +710,7 @@ public class TrafficManager : MonoBehaviour
             a.GetPose(s, 0f, out Vector3 pa, out _);
             b.GetPose(s, 0f, out Vector3 pb, out _);
             pa.y = pb.y = 0f;
-            if ((pa - pb).sqrMagnitude > 2.5f * 2.5f) return Mathf.Max(SiblingOverlapM, s + 4.5f);
+            if ((pa - pb).sqrMagnitude > 2.5f * 2.5f) return Mathf.Max(SiblingOverlapM, s + maxVehicleLength);
         }
         return len;
     }
@@ -637,6 +740,8 @@ public class TrafficManager : MonoBehaviour
         foreach (var k in conn.Conflicts)
         {
             if (k.other == null) continue;
+            // Vehiculo cuyo centro ya salio del otro conector pero su cola (bus) sigue en la zona
+            if (TailInZone(k.other, k.sOtherEnd)) return "conflicto";
             foreach (var other in vehicles)
             {
                 if (other == v) continue;
@@ -681,10 +786,11 @@ public class TrafficManager : MonoBehaviour
         float best = float.PositiveInfinity;
         foreach (var k in conn.Conflicts)
         {
-            if (k.other == null || k.other.Vehicles.Count == 0) continue;
+            if (k.other == null) continue;
             float distV = offset + k.sSelf - selfFrontS;
             if (distV < 0f) continue;  // v ya esta en el punto: seguir y despejarlo
             float tV = distV / Mathf.Max(v.Speed, 1f);
+            if (TailInZone(k.other, k.sOtherEnd)) { best = Mathf.Min(best, Mathf.Max(distV - stopBeforeM, 0f)); continue; }
 
             foreach (var o in k.other.Vehicles)
             {
@@ -939,8 +1045,9 @@ public class TrafficManager : MonoBehaviour
         v.Speed = speed;
         v.Params = p;
         v.SpeedFactor = speedFactor;
-        v.NextLane = lane.PickNext(routingRng);
-        v.NextNextLane = v.NextLane != null ? v.NextLane.PickNext(routingRng) : null;
+        v.NextLane = PickNextFor(v, lane);
+        v.NextNextLane = v.NextLane != null ? PickNextFor(v, v.NextLane) : null;
+        if (v.RandomBodyColor) v.SetBodyColor(SampleBodyColor(colorRng));
         v.SnapPose();
 
         lane.Vehicles.Insert(0, v);

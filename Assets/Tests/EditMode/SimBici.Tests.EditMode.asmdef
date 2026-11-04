@@ -3,6 +3,8 @@
     "rootNamespace": "",
     "references": [
         "SimBici",
+        "Unity.Splines",
+        "Unity.Mathematics",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

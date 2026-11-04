@@ -1,0 +1,5 @@
+"Montreal Bus" by Nick Ladd
+Fuente: Poly Pizza, https://poly.pizza/m/fFCCghvRImG
+Licencia: Creative Commons Attribution 3.0 (CC BY 3.0), https://creativecommons.org/licenses/by/3.0/
+Modificaciones (SimBici, 2026-11-04): colores cambiados a rojo y blanco (sin logos), escala y pivote ajustados.
+La atribucion es obligatoria: debe citarse en los creditos del simulador y en el documento del sistema.

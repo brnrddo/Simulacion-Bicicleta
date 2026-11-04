@@ -171,6 +171,28 @@ public class TrafficLane : MonoBehaviour
         return nextLanes[nextLanes.Count - 1].lane;
     }
 
+    /// <summary>
+    /// Como PickNext, pero solo entre los destinos permitidos (p. ej. conectores donde cabe un vehiculo largo).
+    /// Consume un solo numero del RNG igual que PickNext (determinismo). Si ninguno esta permitido, elige entre todos.
+    /// </summary>
+    public TrafficLane PickNext(System.Random rng, Predicate<TrafficLane> allowed)
+    {
+        float total = 0f;
+        foreach (var c in nextLanes) if (c.lane != null && allowed(c.lane)) total += c.weight;
+        if (total <= 0f) return PickNext(rng);
+
+        double r = rng.NextDouble() * total;
+        TrafficLane last = null;
+        foreach (var c in nextLanes)
+        {
+            if (c.lane == null || !allowed(c.lane)) continue;
+            last = c.lane;
+            r -= c.weight;
+            if (r <= 0) return c.lane;
+        }
+        return last;
+    }
+
     // ------------------------------------------------------------
     // Gizmos: flechas de sentido y conexiones (para revisar la red en la vista Scene)
     // ------------------------------------------------------------

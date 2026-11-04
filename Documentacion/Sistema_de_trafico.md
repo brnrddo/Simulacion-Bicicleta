@@ -233,7 +233,77 @@ Cada auto sortea sus parámetros al aparecer, de normales truncadas (recortadas 
 
 Normal estándar por Box–Muller con `System.Random`: *z* = √(−2 ln *u*₁) · cos(2π*u*₂), con *u*₁ ∈ (0, 1].
 
-**Vehículo (`CarTest`):** largo 4.34 m y ancho 1.85 m, alineados con su BoxCollider.
+**Vehículos:** hasta el 2026-11-04 había un solo modelo (`CarTest`, 4.34 × 1.85 m). Desde esa fecha hay seis modelos ([5.3](#53-vehículos-y-mezcla-del-tráfico)).
+
+**Bus (`DriverProfile_Bus`, [VERIFICAR] con observación):**
+
+| Parámetro | Valor |
+|---|---|
+| Factor de velocidad deseada | 0.85 (0.70–1.00) |
+| *T* | 1.6 s |
+| *s₀* | 2.5 m |
+| *a* | 1.0 m/s² |
+| *b* | 1.5 m/s² |
+| Brecha crítica | 5.5 s |
+
+### 5.3 Vehículos y mezcla del tráfico
+
+**Modelos (2026-11-04).** Los modelos son *low poly* gratuitos, de proporciones realistas:
+
+| Prefab | Modelo | Largo × ancho × alto (m) | Peso en la mezcla | Color |
+|---|---|---|---|---|
+| `Veh_Sedan` | Quaternius NormalCar1 | 4.22 × 1.81 × 1.18 | 30 | Sorteado |
+| `Veh_Hatchback` | Quaternius NormalCar2 | 3.31 × 1.64 × 1.15 | 26 | Sorteado |
+| `Veh_SUV` | Quaternius SUV | 4.21 × 2.11 × 1.53 | 20 | Sorteado |
+| `Veh_Taxi` | Quaternius Taxi | 4.22 × 1.81 × 1.31 | 8 | Negro con techo amarillo, como en Santiago |
+| `Veh_Coupe` | Quaternius SportsCar2 | 3.93 × 1.87 × 1.20 | 5 | Sorteado |
+| `Veh_BusRed` | «Montreal Bus» de Nick Ladd | 12.00 × 2.55 × 3.20 | 3 | Rojo con faldón blanco |
+
+- **Licencias:** los autos de Quaternius son CC0. El bus es **CC BY 3.0**, con atribución obligatoria ([21](#21-referencias)).
+- **Bus:** se repintó con la combinación rojo y blanco de Red Movilidad, sin logos, y se le quitó la flecha de la librea original. **[VERIFICAR]** la librea.
+- **Fuera de la mezcla:** el auto deportivo de prueba (`CarTest`).
+
+**Armado de los prefabs (`SimBici > Build Vehicle Prefabs`).**
+
+1. **Orientación:** el modelo se gira con su eje principal en planta (análisis de componentes principales de los vértices) y el frente hacia +Z. El frente se reconoce por los focos; en el bus se verificó con una captura lateral.
+2. **Escala:** solo el bus se escala, a 12 × 2.55 × 3.2 m.
+3. **Posición:** el modelo se centra en planta y se apoya en el suelo.
+4. **Taxi:** su material amarillo se divide por altura, de modo que lo que está sobre 0.98 m queda amarillo (techo) y lo de abajo negro.
+5. **Malla:** todas las piezas se fusionan en **una sola malla con color por vértice**. El canal alfa marca la carrocería, y el sombreador `SimBici/VehicleVertexColor` le aplica un `_BodyColor` por instancia. Resultado: un draw call por vehículo y GPU instancing entre los del mismo modelo. Los lotes de dibujo bajaron de 576 a ~165 con ~55 vehículos. Las ruedas ya no giran.
+6. **Raíz:** Rigidbody kinemático, BoxCollider ajustado a los límites, capa `Vehicle` y `LODGroup` (se oculta bajo el 1 % de pantalla).
+7. **`TrafficVehicle`:** largo, ancho y distancia entre ejes **medidos del modelo**, y el tipo de modelo, que se usa para el registro.
+
+**Colores:** la carrocería se pinta al aparecer con un generador propio (offset 4000), así no altera las demás secuencias. **[VERIFICAR]** las proporciones de la paleta.
+
+| Color | Proporción |
+|---|---|
+| Blanco | 26 % |
+| Gris plata | 24 % |
+| Negro | 16 % |
+| Gris oscuro | 12 % |
+| Rojo | 10 % |
+| Azul | 8 % |
+| Beige | 4 % |
+
+**Sesgo de la mezcla (corregido).** El spawner volvía a sortear el modelo y el conductor en cada intento de aparición. Con la entrada congestionada ganaban los más cortos: los hatchbacks llegaron a ser 39 de 57. Ahora el vehículo y el conductor de cada llegada se sortean **una vez** y esperan hasta que haya espacio.
+
+**Vehículos largos (bus).** Varias reglas suponían el tamaño de un auto:
+
+1. **Pose con dos ejes.** Con largo > 7 m, la carrocería va entre los puntos del carril en *s* ± *L*e/2 (eje delantero y trasero; *L*e = 6 m), siguiendo los carriles siguiente y anterior. En las curvas se corta hacia adentro como un vehículo real.
+2. **Giros permitidos.** Un vehículo largo solo elige conectores donde no pisa la vereda. En cada punto del conector (cada 0.5 m), la distancia del eje a la vereda (NavMesh de peatones) debe superar
+
+   $$\frac{w}{2} + \left(R - \sqrt{R^2 - L_e^2}\right) + 0.3\ \text{m}$$
+
+   donde *R* es el radio local (por tres puntos) y el paréntesis es el corte del eje trasero. El filtro usa el mismo número aleatorio que la elección normal, así se mantiene el determinismo.
+   - **Resultado:** 20 de 32 conectores permitidos (los rectos y los giros amplios).
+   - **Prohibidos:** los 12 giros cerrados, entre ellos todos los giros desde y hacia la calle x = 4.
+   - **Efecto:** el bus entra por las calles transversales y recorre el anillo por los rectos.
+3. **Cola en varios carriles.** Un vehículo cuyo centro ya pasó al carril siguiente, pero cuya cola sigue en el anterior, cuenta:
+   - como líder de los que vienen detrás (hasta dos carriles atrás, porque la cola de un bus cruza un carril de llegada corto);
+   - en las zonas de conflicto, si su cola está antes del fin de la zona.
+4. **Zonas de conflicto más anchas.** *w*z pasó de 2.3 m a **2.8 m**: 1.275 m (medio ancho del bus) + 0.925 m (auto) + 0.6 m de margen. Las intersecciones se regeneraron.
+5. **Conectores hermanos.** El margen de superposición usa el largo del vehículo más largo de la mezcla, 12 m, en vez de 4.5 m.
+6. **Perfil propio** ([5.2](#52-heterogeneidad-de-conductores-driverprofile)).
 
 ---
 
@@ -324,6 +394,7 @@ El ruteo es estocástico pero determinista: usa un generador con semilla propio 
   | 2000 | Adelantamiento (T4) |
   | 3000 | Peatones ambientales (T6) |
   | 3100, … | Eventos de peatones (cada uno distinto) |
+  | 4000 | Colores de carrocería |
 
   Agregar un spawner no altera la secuencia de los demás.
 - **Orden estable:** los carriles, spawners, intersecciones y controladores se recorren ordenados por nombre; los autos, en orden de Id.
@@ -462,7 +533,7 @@ Aquí *d* es la distancia al inicio de ese carril y *b* la desaceleración cómo
 Al generar la intersección se calculan los conflictos entre todos los pares de conectores que salen de carriles de llegada distintos:
 
 1. Se discretiza cada conector como polilínea en planta, cada 0.25 m.
-2. Se calcula la **zona de conflicto**: sobre cada trayectoria, el tramo cuyos puntos quedan a menos de *w*z = 2.3 m de la otra (dos medios anchos de auto, 2 × 0.925 m, más 0.45 m de margen). Para cada conector se guarda el **inicio** (*s*) y el **fin** (*s*fin) de la zona.
+2. Se calcula la **zona de conflicto**: sobre cada trayectoria, el tramo cuyos puntos quedan a menos de *w*z de la otra. Desde el 2026-11-04, *w*z = 2.8 m: medio ancho del bus 1.275 m + medio ancho del auto 0.925 m + 0.6 m de margen. Antes era 2.3 m, para dos autos. Para cada conector se guarda el **inicio** (*s*) y el **fin** (*s*fin) de la zona.
 
 Esta definición sirve igual para los cruces (la zona empieza ~*w*z antes del cruce) y para las **convergencias**. Ahí las trayectorias se acercan gradualmente antes de unirse, así que el punto donde se tocan está demasiado adelante. Inicialmente se usaba ese punto y el monitor de T4 detectó un roce en una convergencia; con la zona desapareció.
 
@@ -1116,7 +1187,7 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 
 ## 17. Validación
 
-### 17.1 Tests automáticos (EditMode): 49 de 49 pasan
+### 17.1 Tests automáticos (EditMode): 53 de 53 pasan
 
 | Grupo | Tests |
 |---|---|
@@ -1127,6 +1198,7 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | Amarillo | Se detiene si *v*²/(2*b*) ≤ *d*, con el borde exacto (14 m/s, 24.5 m); casos detenido y ya cruzado |
 | T3 | Velocidad en curva; anticipación; aceptación de brecha y tiempo de llegada; prioridades; inicio y fin de la zona de un cruce; convergencia; no conflicto entre carriles opuestos |
 | T6 | Velocidad de marcha (media 1.35 ± 0.01, DE 0.20 ± 0.015, rango, N = 20 000); misma semilla → misma secuencia; inicio del cruce con semáforo (casos borde); paso cebra frente a autos; disparo del cruce fuera del paso; desplazamiento lateral de la pasada cercana |
+| Vehículos (2026-11-04) | Corte del eje trasero, *R* − √(*R*² − *L*e²), incluidos la recta y *R* < *L*e; radio por tres puntos; colores con la misma semilla; elección de ruta filtrada: respeta el filtro, usa un solo sorteo y siempre tiene ruta |
 | Fuerza social | Impulso hacia la velocidad deseada; repulsión decreciente con la distancia y en sentido contrario al otro; anticipación (uno que viene de frente empuja más que uno quieto); anisotropía; límite de velocidad; sin superposición de frente, cruzándose y frente a un peatón detenido, sin trabarse |
 | T4 | Lognormal: mediana y rango intercuartil empíricos dentro de ±5 % con N = 10 000; misma semilla → misma secuencia; perfil quíntico (extremos, aceleración nula en los bordes, aceleración máxima ≤ *a*lat,max); posición lateral requerida y distancia libre; TTC con el de frente; sin desplazamiento lateral detenido y ángulo ≤ 15° en toda la maniobra (2026-10-13) |
 
@@ -1170,6 +1242,13 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
   - **Auto–peatón:** 0 acercamientos a menos de 0.3 m.
   - **Rendimiento en el Editor:** 8.2 ms por frame, 6.1 ms del hilo principal.
 
+- **Vehículos** (2026-11-04; 2 min en nivel 2, con ~55 vehículos y 189 peatones a la densidad de 8 por 100 m de la escena):
+
+  - **Mezcla observada:** 20 sedanes, 18 SUV, 11 hatchbacks, 5 taxis, 1 bus y 1 coupé, de acuerdo con los pesos.
+  - **Veredas:** ningún vehículo, bus incluido, tuvo una esquina sobre la vereda (0 de ~197 000 muestras).
+  - **Superposiciones:** 0 pares de autos superpuestos.
+  - **Rendimiento en el Editor:** 10.2–10.5 ms por frame (8.2 ms del hilo principal), con 162–166 lotes de dibujo. El costo extra frente a antes viene de los 189 peatones con fuerza social, no de los vehículos.
+
 - **Rendimiento (Editor).** T2: ~3.8 ms de CPU por frame. T4 con 60 autos: 7.8 ms por frame, 2.4 ms del hilo principal. T6 con 60 autos y 47 peatones: 12.1 ms por frame, 6.0 ms del hilo principal. **[PENDIENTE]** medir en el visor con el Profiler (objetivo: 11.1 ms por frame a 90 fps).
 
 ---
@@ -1198,6 +1277,10 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | 2026-10-13 | Arreglos tras el visor | Corregir el «lag» de los peatones, el deslizamiento y el zigzag de los autos y la ubicación de semáforos y líneas de detención. Social Force Model después |
 | 2026-10-13 | Adelantamientos | Que adelanten a la bici detenida en calles de doble sentido, sin quedar en el carril contrario esperando el semáforo |
 | 2026-10-13 | Peatones | Implementar el Social Force Model |
+| 2026-11-04 | Plan | Sin eventos scriptados (T5) por ahora. Orden: vehículos y bus, ambientación de Santiago, T7, T8; sincronización en paralelo donde no use el Editor |
+| 2026-11-04 | Git | Inicializar git, sin escenas ajenas a `test.unity` ni demos; texturas Rocketbox a 1024 px |
+| 2026-11-04 | Vehículos | Modelos más realistas que el primer pack propuesto: autos de Quaternius (CC0) y el bus «Montreal Bus» (CC BY) repintado rojo |
+| 2026-11-04 | Bus | Circula como tráfico normal, sin paraderos |
 
 ---
 
@@ -1238,6 +1321,10 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | `scripts/Editor/IntersectionLaneBuilderEditor.cs` | Generación de intersecciones (conflictos, curvas) |
 | `scripts/Editor/CyclistNetworkEditor.cs` | Generación de la red del ciclista |
 | `scripts/Editor/LaneCurbAligner.cs` | Alineación de carriles a la solera |
+| `scripts/Editor/VehiclePrefabBuilder.cs` | `SimBici > Build Vehicle Prefabs`: prefabs de vehículos y mezcla de los spawners |
+| `AssetsLab/Vehicles/`, `AssetsLab/Shaders/VehicleVertexColor.shader` | Prefabs, mallas fusionadas y sombreador de color por vértice |
+| `ThirdParty/Vehicles/` | Modelos de terceros con sus licencias |
+| `scripts/traffic/Profiles/DriverProfile_Bus.asset` | Perfil de conductor del bus |
 | `scripts/Editor/LaneSmoother.cs` | `SimBici > Smooth Lanes`: suavizado del rumbo de carriles y caminos |
 | `scripts/Editor/IntersectionCurbFitter.cs` | `SimBici > Fit Intersections To Curbs`: líneas, pasos y postes según las soleras |
 | `ThirdParty/Rocketbox/Animations/InPlace/` | Clips de caminar en el lugar |
@@ -1337,6 +1424,22 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
   - **Pasos peatonales:** sin espacio pasado el paso, el auto no queda detenido sobre él.
 - **Social Force Model** para los peatones ([14.4](#144-peatones-ambientales-pedestrianmanager)), con 8 tests nuevos (49 en total).
 
+### 2026-11-04: git y vehículos (A1)
+
+- **Git:**
+  - repositorio local con las ramas `main`, `feature/traffic` y `feature/sync`;
+  - quedaron fuera las escenas ajenas a `test.unity`, las demos de los packs y la escena demo de la ciudad;
+  - las texturas Rocketbox se redujeron a 1024 px (988 → 247 MB), con las originales en `ThirdPartySrc`.
+- **Vehículos:** cinco autos de Quaternius (CC0) y un bus rojo (CC BY), armados con `Build Vehicle Prefabs`. Mallas fusionadas con color por vértice y colores sorteados ([5.3](#53-vehículos-y-mezcla-del-tráfico)).
+- **Vehículos largos:**
+  - pose con dos ejes;
+  - giros solo donde no pisan la vereda;
+  - cola en varios carriles y en las zonas de conflicto;
+  - zonas de conflicto de 2.8 m;
+  - superposición de conectores hermanos según el largo máximo.
+- **Spawner:** modelo y conductor se sortean una vez por llegada (corrige el sesgo hacia los autos cortos).
+- 4 tests nuevos (53 en total).
+
 ---
 
 ## 21. Referencias
@@ -1349,6 +1452,8 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 - Nazemi, M., et al. (2021). *Accident Analysis & Prevention, 151*, 105943. https://doi.org/10.1016/j.aap.2020.105943 (Citada en el plan.)
 - Rasch, A., Boda, C.-N., Thalya, P., Aderum, T., Knauss, A., & Dozza, M. (2020). How do oncoming traffic and cyclist lane position influence cyclist overtaking by drivers? *Accident Analysis & Prevention, 142*, 105569. https://doi.org/10.1016/j.aap.2020.105569
 - Treiber, M., Hennecke, A., & Helbing, D. (2000). Congested traffic states in empirical observations and microscopic simulations. *Physical Review E, 62*, 1805–1824.
+- Ladd, N. (2017). *Montreal Bus* [modelo 3D]. Poly Pizza, https://poly.pizza/m/fFCCghvRImG. Licencia CC BY 3.0 (atribución obligatoria). Modificado: colores, escala y sin la flecha de la librea.
+- Quaternius (2018). *LowPoly Cars (Realistic Car Pack)* [modelos 3D]. https://quaternius.itch.io/lowpoly-cars. Licencia CC0.
 - Treiber, M., & Kanagaraj, V. (2015). Comparing numerical integration schemes for time-continuous car-following models. *Physica A, 419*, 183–195.
 - Transportation Research Board. *Highway Capacity Manual*. **[VERIFICAR]** edición y tabla de brechas críticas para intersecciones con PARE.
 - Ministerio de Transportes y Telecomunicaciones (Chile). *Manual de Señalización de Tránsito*, Capítulo 4: Semáforos. **[VERIFICAR]** duración del amarillo y del despeje.

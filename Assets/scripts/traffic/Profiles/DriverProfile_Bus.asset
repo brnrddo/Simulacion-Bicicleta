@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 950678198ddb69b4c989d2856f7745ef, type: 3}
+  m_Name: DriverProfile_Bus
+  m_EditorClassIdentifier: SimBici::DriverProfile
+  speedFactorMean: 0.85
+  speedFactorSd: 0.05
+  speedFactorRange: {x: 0.7, y: 1}
+  timeHeadwayMean: 1.6
+  timeHeadwaySd: 0.2
+  timeHeadwayRange: {x: 1.2, y: 2.2}
+  minGapMean: 2.5
+  minGapSd: 0.3
+  minGapRange: {x: 2, y: 3.5}
+  maxAccelMean: 1
+  maxAccelSd: 0.1
+  maxAccelRange: {x: 0.8, y: 1.3}
+  comfortDecelMean: 1.5
+  comfortDecelSd: 0.2
+  comfortDecelRange: {x: 1.2, y: 2}
+  exponent: 4
+  criticalGapMean: 5.5
+  criticalGapSd: 0.6
+  criticalGapRange: {x: 4, y: 8}
+  minorStreetExtraGapS: 2
+  followBeforeOvertakeMean: 2
+  followBeforeOvertakeSd: 1
+  followBeforeOvertakeRange: {x: 0.5, y: 6}
