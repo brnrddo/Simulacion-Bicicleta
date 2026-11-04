@@ -149,6 +149,64 @@ La calzada pintada del circuito mide 12 m. Se adoptó este perfil:
 - **Eje de cada carril de autos:** a **4.2 m** de su solera derecha (2.4 + 1.8).
 - **Camino del ciclista en la ciclovía:** a **1.2 m** de la solera (centro de la ciclovía).
 
+**Desde el 2026-11-04 (A2).** Las pistas de autos no se movieron. Bernardo descartó una ciclovía bidireccional, porque entre la línea de borde y la de separación quedan 2.0 m pintados y la norma pide 2.2–2.4 m. El resultado:
+
+| Franja (de exterior a interior) | Ancho | Marcas |
+|---|---|---|
+| Ciclovía exterior, un sentido (el de los carriles `Lane_Main_*`) | 2.4 m | Línea de separación **continua** con tachones amarillos y negros cada 2.5 m [VERIFICAR] y pictograma de bicicleta con flecha |
+| Carril de autos | 3.6 m | — |
+| Carril de autos (sentido contrario) | 3.6 m | — |
+| **Berma** interior (antes, la otra ciclovía) | 2.4 m | Línea de borde continua y solera amarilla; sin pictogramas |
+
+- **Ciclista en sentido interior** (`Lane_Main2_*`): va junto a la solera de la berma, a 0.75 m, como en las calles sin ciclovía ([12.1](#121-generación-simbici--generate-cyclist-network)).
+- **Herramienta:** `SimBici > Build Ring Bike Lane` (`RingBikeLaneEditor.cs`).
+  - Clasifica los segmentos pintados por su distancia al eje de la calzada: ±3.75 m son las separaciones y ±4.75 m los pictogramas.
+  - Los une en líneas continuas y las corta dentro de las intersecciones y sobre los pasos peatonales. Las segmentadas originales los atravesaban.
+  - Apaga los pictogramas interiores y los segmentos de carril que pasaban sobre los pasos (56), y regenera la red del ciclista.
+  - No borra nada: lo apagado queda con el sufijo `(A2 off)` y se restaura al volver a ejecutarla.
+
+### 4.4 Ambientación de Santiago (A2)
+
+Se hizo a partir de las fotos de referencia de `Documentacion/A2_referencias/referencias_Santiago.html` (Wikimedia Commons, con licencia y autor por foto), que Bernardo aprobó el 2026-11-04. **No se cambió la geometría** de calles, veredas ni edificios.
+
+**Herramienta.** `SimBici > Decorate City` (`CityDecorator.cs`).
+- Todo es procedural, con semilla `CreateRng(20261104, 5000)`, y se rehace o se quita entero con `SimBici > Decorate City (quitar)`.
+- Las texturas (PARE, placas, señal de parada, panel, baldosa) se generan en el Editor, sin descargas.
+- Las mallas usan color por vértice (`Decor_VertexColor.mat`, sombreador `SimBici/VehicleVertexColor` con alfa 0) y se agrupan en celdas de 80 m, estáticas.
+- Al final rehace `Build Pedestrian Setup`, que conserva la densidad.
+
+| Elemento | Detalle | Cantidad |
+|---|---|---|
+| Señal **PARE** | Octógono rojo con «PARE» en vez del sprite «STOP» del pack de la ciudad, con la misma medida (0.9 m) | 3 |
+| **Placas de calle** | Negras con letras blancas y recuadro de flecha (doble en las avenidas; simple, en el sentido de tránsito, en las calles de un sentido), doble faz, 1.0 × 0.22 m, en un poste de 2.95 m. Dos esquinas opuestas por intersección | 20 placas en 10 postes |
+| **Paraderos** | Refugio gris de 4.0 × 1.4 m con faja roja, banca, dos paneles con una ilustración genérica sin marcas, señal de parada oscura («PARADA», código y recorridos ficticios) 3 m antes, y solera amarilla de 12 m. **El bus no se detiene** | 4 (dos en la berma interior, dos en el borde exterior) |
+| **Vereda de baldosa** | Baldosa microvibrada gris de 40 × 40 cm con 4 × 4 pastillas. Se proyecta en coordenadas de mundo (`SimBici/WorldTile`) porque las UV de las veredas del pack tienen otra escala en cada eje | 49 veredas |
+| **Solera amarilla** | Cara y canto de la solera en toda la berma interior, 8 m junto a cada esquina [VERIFICAR] y 12 m en los paraderos | 829 m |
+| **Árboles** | Se mantienen los 80 actuales, con la base del tronco encalada (1 m) y un alcorque de tierra de 1.2 m con borde de hormigón | 80 troncos, 78 alcorques |
+| **Grifos** | Amarillos, a 0.45 m de la solera, de 6 a 12 m después del inicio de una cuadra (60 % de las cuadras) | 11 |
+| **Basureros** | Verde oscuro, en poste, a 0.55 m de la solera, cada 50–65 m | 32 |
+| **Cordillera y bruma** | Anillo de cerros a 560–790 m (dentro del plano lejano de 1000 m desde cualquier punto de la ciudad). Al oriente, cumbres de hasta ~165 m, unos 7–10° sobre el horizonte, como los Andes vistos desde Providencia, con nieve. Al poniente, cerros bajos. Bruma exponencial de densidad 0.0005 [VERIFICAR en el visor] | 1 |
+
+**Reglas de colocación:**
+- en la vereda (altura > 0.15 m, sin rebajes);
+- a más de 2.5 m de los pasos peatonales (0.5 m las placas);
+- sin chocar con árboles, faroles ni postes, ni con lo ya colocado;
+- con **paso libre de 1.8 m** para peatones detrás de grifos, basureros y paraderos.
+
+**NavMesh.** Lo que va sobre la vereda (grupo `Veredas`) tiene un `NavMeshModifier` no caminable. Los alcorques y troncos encalados (grupo `Arboles`) **no** lo tienen, porque los árboles tampoco eran obstáculo antes: así son solo adorno. Con los alcorques no caminables, los peatones se congestionaban (ver [17.2](#172-pruebas-de-simulación)).
+
+**Nombres de calles [VERIFICAR] con Bernardo.** Son ficticios, tomados de Providencia:
+
+| Calle | Nombre |
+|---|---|
+| Recta norte del anillo | AV. ANDRÉS BELLO |
+| Recta sur del anillo | AV. PROVIDENCIA |
+| x = −60 | PEDRO DE VALDIVIA |
+| x = 4 | RICARDO LYON |
+| x = 60 | LOS LEONES |
+
+**Fuera de alcance, por decisión de Bernardo:** quioscos, cables aéreos y cambio del modelo de los árboles.
+
 Los carriles del circuito, dibujados a mano, estaban entre 4.0 y 4.6 m de la solera. Se alinearon con la herramienta `SimBici > Align Lanes To Curb`:
 
 1. A lo largo de cada carril, cada 2 m, se mide con rayos verticales la distancia a la solera derecha. Un punto está sobre la calzada si un rayo hacia abajo golpea un collider de la capa `Ground` que no es el terreno.
@@ -395,6 +453,7 @@ El ruteo es estocástico pero determinista: usa un generador con semilla propio 
   | 3000 | Peatones ambientales (T6) |
   | 3100, … | Eventos de peatones (cada uno distinto) |
   | 4000 | Colores de carrocería |
+  | 5000 | Decoración de la ciudad (en el Editor, semilla fija 20261104) |
 
   Agregar un spawner no altera la secuencia de los demás.
 - **Orden estable:** los carriles, spawners, intersecciones y controladores se recorren ordenados por nombre; los autos, en orden de Id.
@@ -675,6 +734,11 @@ Se deriva de la red de tráfico. Cada carril que no es conector da un tramo de b
 
 **Resultado:** 46 tramos (30 por ciclovía, 16 junto a la solera), 32 giros y cruces, y 6 líneas de detención del ciclista (en los accesos con semáforo). Mayor desajuste entre tramos enlazados: 0.17 m.
 
+**Desde el 2026-11-04 (A2), sin la ciclovía interior.**
+- **Tramos:** 46 (15 por ciclovía, 31 junto a la solera), 32 giros y cruces, 6 líneas de detención y 26 cruces bici–giro de autos. Mayor desajuste: 0.08 m.
+- **Sentido interior del anillo:** queda junto a la solera de la berma, a 3.45 m del eje del carril.
+- **Ciclovía exterior:** sin cambios (3.0 m del eje, 1.2 m de la solera).
+
 ### 12.2 Seguimiento del ciclista (`RiderRoute`)
 
 El ciclista elige su camino; `RiderRoute` identifica en qué tramo va.
@@ -721,6 +785,7 @@ Los autos nunca se desplazaban lateralmente.
   | Dónde va la bici | Distancia |
   |---|---|
   | Ciclovía del circuito | 1.76–1.82 m |
+  | Berma interior del anillo (desde A2) | ~2.25 m por geometría [VERIFICAR con `OvertakeMonitor`] |
   | Calle x = 4 | ~2.0 m |
   | Calle x = −60 | ~2.3 m |
   | Calle x = 60 | ~2.5 m |
@@ -1158,6 +1223,8 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | T4: adelantamiento ambiental | Terminada; falta la prueba en el visor |
 | T5: adelantamientos scriptados | Pendiente (se dejó para después de T6, por decisión de Bernardo) |
 | T6: peatones | Terminada; falta la prueba en el visor |
+| A1: vehículos (autos Quaternius y bus rojo) | Terminada; falta la prueba en el visor |
+| A2: ambientación de Santiago y ciclovía del anillo | Terminada; falta la prueba en el visor |
 | T7: medición y logging de agentes | Pendiente |
 | T8: integración con el experimento | Pendiente |
 
@@ -1170,7 +1237,9 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 - **Tráfico de frente en las curvas.** El TTC con el auto de frente se mide en planta con la dirección del carril en la posición del auto, así que en curvas cerradas puede subestimar o perder un auto lejano. El aborto con margen y la reacción de los autos de frente cubren ese caso.
 - **Distancia lateral fija en la maniobra.** El auto ambiental no corrige su posición si el ciclista se mueve lateralmente durante la pasada. La distancia real queda registrada igual (`min_real_m`). El ajuste continuo es para los adelantamientos scriptados (T5).
 - **Bici detenida dentro del carril.** Un auto detenido justo detrás ya no puede correrse de lado (la maniobra está acoplada al avance), así que espera a que la bici avance. Si se detuvo con espacio adelante, se corre mientras avanza despacio, con un ángulo de hasta 15°.
-- **Marcas de la ciudad.** Las líneas segmentadas transversales de la textura de las calles no coinciden con los pasos y las líneas nuevas.
+- **Marcas de la ciudad.** Las líneas segmentadas transversales de la textura de las calles no coinciden con los pasos y las líneas nuevas. Desde A2 ya no hay segmentos de carril sobre los pasos peatonales.
+- **Decoración sin colliders.** El mobiliario (A2) no tiene colliders: la bici lo atraviesa si sube a la vereda. Si hace falta, se agregan en la capa `StaticObstacle`.
+- **Líneas de la ciclovía.** Son `LineRenderer` como las del pack, así que no entran en el agrupamiento estático: suman unos 25 lotes de dibujo.
 - **Cadencia de un clip.** El clip `m_walk_neutral_01` es lento (1.01 m/s): para un peatón rápido (1.7 m/s) se reproduce a ×1.7.
 - **Semáforo peatonal simple.** Usa lentes de color, sin el pictograma del peatón.
 - **Pasada cercana a la vista.** El peatón aparece unos 10 s antes del encuentro (~13 m más allá del punto del evento) y podría verse aparecer si la vista está despejada.
@@ -1180,7 +1249,8 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
   2. `Fit Intersections To Curbs`, o `Generate Intersection Lanes`.
   3. `Generate Cyclist Network`.
   4. `Analyze Lane Room`.
-  5. `Build Pedestrian Setup`, que rehace los pasos y el NavMesh y conserva la densidad elegida.
+  5. `Build Ring Bike Lane`, que regenera la red del ciclista, y `Decorate City`, que termina con `Build Pedestrian Setup`.
+  6. `Build Pedestrian Setup`, que rehace los pasos y el NavMesh y conserva la densidad elegida.
 - **Tiempo del Editor.** Al entrar en Play, el precalentamiento bloquea el hilo principal unos segundos.
 
 ---
@@ -1249,6 +1319,23 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
   - **Superposiciones:** 0 pares de autos superpuestos.
   - **Rendimiento en el Editor:** 10.2–10.5 ms por frame (8.2 ms del hilo principal), con 162–166 lotes de dibujo. El costo extra frente a antes viene de los 189 peatones con fuerza social, no de los vehículos.
 
+- **Ambientación (A2, 2026-11-04;** 3 min en nivel 2, ~50 autos y 189 peatones**):**
+
+  - **Tráfico:** 0 pares de autos superpuestos, 0 autos detenidos en el carril contrario más de 3 s, 0 interbloqueos auto–peatón y 0 acercamientos auto–peatón a menos de 0.3 m.
+  - **Peatones (fuerza social), comparación A/B:**
+
+    | Métrica | Sin decoración | Primera versión (alcorques no caminables) | Versión final |
+    |---|---|---|---|
+    | Cruces | 175 | 171 | 181 |
+    | Duración de cruce (p50 / p90 / máx.) | 9.5 / 13.4 / 19.0 s | 9.6 / 13.4 / 18.6 s | 9.4 / 13.3 / 18.6 s |
+    | Pares a < 0.45 m, ambos caminando (frames) | 26 | 459 | 109, dispersos |
+    | Fuera del NavMesh | 0 | 29 | 0 |
+    | Trabados > 6 s | 0 | 2 | 1 |
+
+    La primera versión concentraba los pares en la esquina sureste. Se corrigió dejando los alcorques fuera del NavMesh y exigiendo 1.8 m de paso libre.
+  - **Rendimiento en el Editor:** 10.3–11.1 ms por frame (8.3–8.9 ms del hilo principal) y ~215 lotes de dibujo. Antes de A2: 10.2–10.5 ms y ~165 lotes. **[VERIFICAR] en el visor.**
+  - **Tests:** 53 de 53 pasan.
+
 - **Rendimiento (Editor).** T2: ~3.8 ms de CPU por frame. T4 con 60 autos: 7.8 ms por frame, 2.4 ms del hilo principal. T6 con 60 autos y 47 peatones: 12.1 ms por frame, 6.0 ms del hilo principal. **[PENDIENTE]** medir en el visor con el Profiler (objetivo: 11.1 ms por frame a 90 fps).
 
 ---
@@ -1281,6 +1368,8 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | 2026-11-04 | Git | Inicializar git, sin escenas ajenas a `test.unity` ni demos; texturas Rocketbox a 1024 px |
 | 2026-11-04 | Vehículos | Modelos más realistas que el primer pack propuesto: autos de Quaternius (CC0) y el bus «Montreal Bus» (CC BY) repintado rojo |
 | 2026-11-04 | Bus | Circula como tráfico normal, sin paraderos |
+| 2026-11-04 | Ambientación | Aprobada la lista de la hoja de referencia: PARE, placas, paraderos, baldosa, soleras amarillas, árboles con alcorque y tronco encalado, grifos, basureros, cordillera y bruma. Sin quioscos ni cables aéreos; se mantiene el modelo de los árboles |
+| 2026-11-04 | Ciclovía del anillo | Se descartó una bidireccional (2.0 m pintados es angosto). Queda solo la exterior, en un sentido, con aspecto chileno; la interior pasa a ser berma con solera amarilla. Las pistas de autos no se mueven |
 
 ---
 
@@ -1325,6 +1414,11 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | `AssetsLab/Vehicles/`, `AssetsLab/Shaders/VehicleVertexColor.shader` | Prefabs, mallas fusionadas y sombreador de color por vértice |
 | `ThirdParty/Vehicles/` | Modelos de terceros con sus licencias |
 | `scripts/traffic/Profiles/DriverProfile_Bus.asset` | Perfil de conductor del bus |
+| `scripts/Editor/RingBikeLaneEditor.cs` | `SimBici > Build Ring Bike Lane`: ciclovía exterior y berma interior del anillo |
+| `scripts/Editor/CityDecorator.cs` | `SimBici > Decorate City` y `Decorate City (quitar)`: ambientación de Santiago |
+| `AssetsLab/Shaders/WorldTile.shader` | Baldosa proyectada en coordenadas de mundo |
+| `AssetsLab/Decor/` | Materiales, texturas generadas y mallas de la decoración (`Generated/`) |
+| `Documentacion/A2_referencias/` | Hoja de referencias fotográficas de Santiago y capturas previas |
 | `scripts/Editor/LaneSmoother.cs` | `SimBici > Smooth Lanes`: suavizado del rumbo de carriles y caminos |
 | `scripts/Editor/IntersectionCurbFitter.cs` | `SimBici > Fit Intersections To Curbs`: líneas, pasos y postes según las soleras |
 | `ThirdParty/Rocketbox/Animations/InPlace/` | Clips de caminar en el lugar |
@@ -1440,6 +1534,13 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 - **Spawner:** modelo y conductor se sortean una vez por llegada (corrige el sesgo hacia los autos cortos).
 - 4 tests nuevos (53 en total).
 
+### 2026-11-04: ambientación de Santiago (A2)
+
+- **Hoja de referencias:** fotos de Wikimedia Commons de ciclovías, paraderos, placas, PARE, grifos, quioscos, veredas, arbolado y cordillera. Bernardo aprobó la lista de elementos.
+- **Ciclovía del anillo:** exterior en un sentido, con línea continua, tachones y flechas; berma interior en lugar de la segunda ciclovía ([4.3](#43-perfil-transversal-del-circuito)). Red del ciclista regenerada.
+- **Decoración procedural** con `Decorate City` ([4.4](#44-ambientación-de-santiago-a2)).
+- **Peatones:** se rehízo el setup con la misma densidad (189). Se corrigió una congestión causada por los alcorques no caminables.
+
 ---
 
 ## 21. Referencias
@@ -1452,6 +1553,9 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 - Nazemi, M., et al. (2021). *Accident Analysis & Prevention, 151*, 105943. https://doi.org/10.1016/j.aap.2020.105943 (Citada en el plan.)
 - Rasch, A., Boda, C.-N., Thalya, P., Aderum, T., Knauss, A., & Dozza, M. (2020). How do oncoming traffic and cyclist lane position influence cyclist overtaking by drivers? *Accident Analysis & Prevention, 142*, 105569. https://doi.org/10.1016/j.aap.2020.105569
 - Treiber, M., Hennecke, A., & Helbing, D. (2000). Congested traffic states in empirical observations and microscopic simulations. *Physical Review E, 62*, 1805–1824.
+- Hernández, J. (2016). *Estructura y composición del arbolado urbano de Santiago*. GEP, Universidad de Chile.
+- MINVU (2015). *Vialidad ciclo-inclusiva: recomendaciones de diseño*. Ministerio de Vivienda y Urbanismo de Chile.
+- Wikimedia Commons: fotos de referencia de Santiago (licencias CC BY y CC BY-SA, autores en `Documentacion/A2_referencias/referencias_Santiago.html`). Solo como referencia visual; no se incluyen en el proyecto.
 - Ladd, N. (2017). *Montreal Bus* [modelo 3D]. Poly Pizza, https://poly.pizza/m/fFCCghvRImG. Licencia CC BY 3.0 (atribución obligatoria). Modificado: colores, escala y sin la flecha de la librea.
 - Quaternius (2018). *LowPoly Cars (Realistic Car Pack)* [modelos 3D]. https://quaternius.itch.io/lowpoly-cars. Licencia CC0.
 - Treiber, M., & Kanagaraj, V. (2015). Comparing numerical integration schemes for time-continuous car-following models. *Physica A, 419*, 183–195.
