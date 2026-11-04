@@ -1,0 +1,75 @@
+# Unity (generado)
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# IDE / soluciones generadas
+.vs/
+.vscode/
+.idea/
+*.csproj
+*.sln
+*.slnx
+*.suo
+*.user
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Respaldos manuales y fuentes de terceros fuera del proyecto
+/Backups/
+/ThirdPartySrc/
+*.unity.bak
+/Assets/EscenasLab/test_backup_*.unity
+/Assets/EscenasLab/test_backup_*.unity.meta
+
+# Builds y crash reports
+*.apk
+*.aab
+*.unitypackage
+crashlytics-build.properties
+sysinfo.txt
+
+# Python (analisis)
+__pycache__/
+*.pyc
+.venv/
+
+# No usados por test.unity (siguen en el disco, fuera del repositorio; decision de Bernardo 2026-11-04)
+# Escenas propias distintas de test.unity
+/Assets/EscenasLab/*.unity
+/Assets/EscenasLab/*.unity.meta
+!/Assets/EscenasLab/test.unity
+!/Assets/EscenasLab/test.unity.meta
+/Assets/BiciConTeclado.unity*
+/Assets/BiciConVr.unity*
+/Assets/BiciConVrFinalPrototipo.unity*
+# Escena demo del pack de ciudad (se conservan modelos, prefabs y texturas para ambientar)
+/Assets/Versatile Studio Assets(cityAsset)/Demo City By Versatile Studio/Scenes/
+/Assets/Versatile Studio Assets(cityAsset)/Demo City By Versatile Studio/Scenes.meta
+# Demos de los packs
+/Assets/ARCADE - FREE Racing Car/Scenes/
+/Assets/ARCADE - FREE Racing Car/Scenes.meta
+/Assets/ARCADE - FREE Racing Car/Skybox/
+/Assets/ARCADE - FREE Racing Car/Skybox.meta
+/Assets/Traffic Lights System/Demo/
+/Assets/Traffic Lights System/Demo.meta
+/Assets/Traffic Lights System/Info/
+/Assets/Traffic Lights System/Info.meta
+/Assets/Understone(bikeModelAsset)/Free Bike Pack/Scenes/
+/Assets/Understone(bikeModelAsset)/Free Bike Pack/Scenes.meta

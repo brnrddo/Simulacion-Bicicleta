@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 950678198ddb69b4c989d2856f7745ef, type: 3}
+  m_Name: DriverProfile
+  m_EditorClassIdentifier: Assembly-CSharp::DriverProfile
+  speedFactorMean: 1
+  speedFactorSd: 0.08
+  speedFactorRange: {x: 0.8, y: 1.2}
+  timeHeadwayMean: 1.3
+  timeHeadwaySd: 0.2
+  timeHeadwayRange: {x: 0.8, y: 2}
+  minGapMean: 2
+  minGapSd: 0.3
+  minGapRange: {x: 1.2, y: 3}
+  maxAccelMean: 1.5
+  maxAccelSd: 0.2
+  maxAccelRange: {x: 0.9, y: 2.2}
+  comfortDecelMean: 2
+  comfortDecelSd: 0.3
+  comfortDecelRange: {x: 1.3, y: 3}
+  exponent: 4

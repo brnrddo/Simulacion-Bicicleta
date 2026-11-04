@@ -1,0 +1,5 @@
+Microsoft Rocketbox Avatar Library (licencia MIT, ver LICENSE.md)
+https://github.com/microsoft/Microsoft-Rocketbox
+Gonzalez-Franco, M., et al. (2020). The Rocketbox library and the utility of freely available rigged avatars. Frontiers in Virtual Reality.
+Subconjunto: 8 Female_Adult y 8 Male_Adult (modelo + texturas color/normal/opacidad), animaciones de caminar en el lugar (motextr_xy) e idle (motextr_static).
+Descargado con git sparse-checkout el 2026-10-07. Fuente completa (solo estos archivos) en C:\Lab\Simulacion\ThirdPartySrc\Microsoft-Rocketbox.

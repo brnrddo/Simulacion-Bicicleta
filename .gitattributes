@@ -1,0 +1,15 @@
+# Unity: escenas y assets como binarios (test.unity esta en serializacion binaria). Sin conversion de fin de linea.
+* -text
+*.unity binary
+*.asset binary
+*.prefab binary
+*.fbx binary
+*.png binary
+*.jpg binary
+*.tga binary
+*.psd binary
+*.wav binary
+*.mp3 binary
+*.anim binary
+*.controller binary
+*.mat binary

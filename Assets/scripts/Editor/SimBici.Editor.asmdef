@@ -1,0 +1,22 @@
+{
+    "name": "SimBici.Editor",
+    "rootNamespace": "",
+    "references": [
+        "SimBici",
+        "Unity.Splines",
+        "Unity.Mathematics",
+        "Unity.AI.Navigation",
+        "Unity.AI.Navigation.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
