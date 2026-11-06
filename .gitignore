@@ -1,4 +1,4 @@
-# Unity (generado)
+# Archivos generados por Unity
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
@@ -9,7 +9,7 @@
 /[Mm]emoryCaptures/
 /[Rr]ecordings/
 
-# IDE / soluciones generadas
+# IDE y soluciones generadas
 .vs/
 .vscode/
 .idea/
@@ -26,19 +26,19 @@
 *.opendb
 *.VC.db
 
-# Sistema
+# Sistema operativo
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Respaldos manuales y fuentes de terceros fuera del proyecto
+# Respaldos
 /Backups/
 /ThirdPartySrc/
 *.unity.bak
 /Assets/EscenasLab/test_backup_*.unity
 /Assets/EscenasLab/test_backup_*.unity.meta
 
-# Builds y crash reports
+# Builds y reportes de errores
 *.apk
 *.aab
 *.unitypackage
@@ -50,8 +50,10 @@ __pycache__/
 *.pyc
 .venv/
 
-# No usados por test.unity (siguen en el disco, fuera del repositorio; decision de Bernardo 2026-11-04)
-# Escenas propias distintas de test.unity
+# Planes de trabajo
+/PLAN_*.md
+
+# Escenas de prueba (la escena del simulador es test.unity)
 /Assets/EscenasLab/*.unity
 /Assets/EscenasLab/*.unity.meta
 !/Assets/EscenasLab/test.unity
@@ -59,23 +61,8 @@ __pycache__/
 /Assets/BiciConTeclado.unity*
 /Assets/BiciConVr.unity*
 /Assets/BiciConVrFinalPrototipo.unity*
-# Escena demo del pack de ciudad (se conservan modelos, prefabs y texturas para ambientar)
-/Assets/Versatile Studio Assets(cityAsset)/Demo City By Versatile Studio/Scenes/
-/Assets/Versatile Studio Assets(cityAsset)/Demo City By Versatile Studio/Scenes.meta
-# Demos de los packs
-/Assets/ARCADE - FREE Racing Car/Scenes/
-/Assets/ARCADE - FREE Racing Car/Scenes.meta
-/Assets/ARCADE - FREE Racing Car/Skybox/
-/Assets/ARCADE - FREE Racing Car/Skybox.meta
-/Assets/Traffic Lights System/Demo/
-/Assets/Traffic Lights System/Demo.meta
-/Assets/Traffic Lights System/Info/
-/Assets/Traffic Lights System/Info.meta
-/Assets/Understone(bikeModelAsset)/Free Bike Pack/Scenes/
-/Assets/Understone(bikeModelAsset)/Free Bike Pack/Scenes.meta
 
-# Paquetes de la Unity Asset Store: su licencia no permite redistribuirlos (2026-11-06).
-# test.unity ya no los usa: la bici y los semaforos son modelos CC BY (Assets/ThirdParty).
+# Paquetes de la Unity Asset Store (su licencia no permite redistribuirlos)
 /Assets/Versatile Studio Assets(cityAsset)/
 /Assets/Versatile Studio Assets(cityAsset).meta
 /Assets/Traffic Lights System/
@@ -84,7 +71,8 @@ __pycache__/
 /Assets/ARCADE - FREE Racing Car.meta
 /Assets/Understone(bikeModelAsset)/
 /Assets/Understone(bikeModelAsset).meta
-# Prefabs propios que dependen de esos paquetes y ya no se usan
+
+# Prefabs que dependen de los paquetes de la Asset Store (no se usan en test.unity)
 /Assets/AssetsLab/CarTest.prefab
 /Assets/AssetsLab/CarTest.prefab.meta
 /Assets/AssetsLab/Interseccion.prefab
