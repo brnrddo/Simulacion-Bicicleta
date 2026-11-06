@@ -1,0 +1,9 @@
+"Vintage Bicycle" (https://sketchfab.com/3d-models/vintage-bicycle-1795f6e907634afda88fdaf45f67b279)
+by VladNeko (https://sketchfab.com/vlad.neko)
+is licensed under Creative Commons Attribution 4.0 (http://creativecommons.org/licenses/by/4.0/).
+
+Uso en este proyecto: bicicleta del participante. Descargado de Sketchfab el
+2026-11-06 en formato GLB (texturas 2k). Cambios: escala, pivotes y
+separacion en piezas (manubrio, ruedas) para la animacion; se quitaron
+los cables de freno y cambios; materiales
+convertidos para Unity.

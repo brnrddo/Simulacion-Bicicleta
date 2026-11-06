@@ -20,8 +20,16 @@ public class ResearchTrafficLight : MonoBehaviour
     [SerializeField] private Renderer greenRenderer;
 
     [Header("Materiales de las lentes")]
-    [SerializeField] private Material matOn;   // TL_Lights_On (ya emisivo)
-    [SerializeField] private Material matOff;  // TL_LightsOff
+    [SerializeField] private Material matOn;   // encendida (si no hay material por color)
+    [SerializeField] private Material matOff;  // apagada (si no hay material por color)
+
+    [Header("Materiales por color (opcional; si estan, reemplazan a matOn/matOff)")]
+    [SerializeField] private Material redOn;
+    [SerializeField] private Material redOff;
+    [SerializeField] private Material yellowOn;
+    [SerializeField] private Material yellowOff;
+    [SerializeField] private Material greenOn;
+    [SerializeField] private Material greenOff;
 
     [Header("Halo (opcional)")]
     [SerializeField] private Material haloRed;
@@ -64,14 +72,15 @@ public class ResearchTrafficLight : MonoBehaviour
         CurrentPhase = phase;
         shown = true;
 
-        SetLens(redRenderer, haloR, phase == SignalPhase.Red);
-        SetLens(yellowRenderer, haloY, phase == SignalPhase.Yellow);
-        SetLens(greenRenderer, haloG, phase == SignalPhase.Green);
+        SetLens(redRenderer, haloR, phase == SignalPhase.Red, redOn, redOff);
+        SetLens(yellowRenderer, haloY, phase == SignalPhase.Yellow, yellowOn, yellowOff);
+        SetLens(greenRenderer, haloG, phase == SignalPhase.Green, greenOn, greenOff);
     }
 
-    private void SetLens(Renderer lens, Renderer halo, bool on)
+    private void SetLens(Renderer lens, Renderer halo, bool on, Material colorOn, Material colorOff)
     {
-        if (lens != null) lens.sharedMaterial = on ? matOn : matOff;
+        Material m = on ? (colorOn != null ? colorOn : matOn) : (colorOff != null ? colorOff : matOff);
+        if (lens != null && m != null) lens.sharedMaterial = m;
         if (halo != null) halo.enabled = on;
     }
 

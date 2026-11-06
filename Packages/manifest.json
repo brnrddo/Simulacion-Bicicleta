@@ -3,6 +3,7 @@
     "com.irt.osm2unity": "https://github.com/rwth-irt/osm2unity.git",
     "com.meta.xr.sdk.core": "201.0.0",
     "com.unity.ai.navigation": "2.0.15",
+    "com.unity.cloud.gltfast": "6.20.0",
     "com.unity.collab-proxy": "2.11.4",
     "com.unity.feature.development": "1.0.2",
     "com.unity.inputsystem": "1.19.0",

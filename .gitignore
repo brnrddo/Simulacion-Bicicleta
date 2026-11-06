@@ -73,3 +73,19 @@ __pycache__/
 /Assets/Traffic Lights System/Info.meta
 /Assets/Understone(bikeModelAsset)/Free Bike Pack/Scenes/
 /Assets/Understone(bikeModelAsset)/Free Bike Pack/Scenes.meta
+
+# Paquetes de la Unity Asset Store: su licencia no permite redistribuirlos (2026-11-06).
+# test.unity ya no los usa: la bici y los semaforos son modelos CC BY (Assets/ThirdParty).
+/Assets/Versatile Studio Assets(cityAsset)/
+/Assets/Versatile Studio Assets(cityAsset).meta
+/Assets/Traffic Lights System/
+/Assets/Traffic Lights System.meta
+/Assets/ARCADE - FREE Racing Car/
+/Assets/ARCADE - FREE Racing Car.meta
+/Assets/Understone(bikeModelAsset)/
+/Assets/Understone(bikeModelAsset).meta
+# Prefabs propios que dependen de esos paquetes y ya no se usan
+/Assets/AssetsLab/CarTest.prefab
+/Assets/AssetsLab/CarTest.prefab.meta
+/Assets/AssetsLab/Interseccion.prefab
+/Assets/AssetsLab/Interseccion.prefab.meta

@@ -1,0 +1,8 @@
+"Stoplight from Chile - Decayed" (https://sketchfab.com/3d-models/stoplight-from-chile-decayed-5d41d46d0c3849e89de812f67c7de39f)
+by Felipe Carvajal Brown (https://sketchfab.com/brownmarcostudios)
+is licensed under Creative Commons Attribution 4.0 (http://creativecommons.org/licenses/by/4.0/).
+
+Uso en este proyecto: semaforos vehiculares de las intersecciones. Descargado
+de Sketchfab el 2026-11-06 en formato GLB (texturas 2k). Cambios: escala,
+pivotes, poste reflejado segun el lado del brazo, poste y caja en negro, y
+materiales propios de las luces (encendida y apagada).

@@ -26,12 +26,14 @@ Alcance de esta licencia
 La licencia MIT de arriba cubre solo el codigo y las herramientas propias del
 proyecto (Assets/scripts, Assets/Tests, Assets/AssetsLab y Documentacion).
 
-El contenido de terceros conserva su propia licencia y NO queda bajo MIT:
-  - Assets/ThirdParty/Rocketbox: Microsoft Rocketbox (MIT, ver su LICENSE).
+El contenido de terceros conserva su propia licencia y NO queda bajo MIT
+(detalle y creditos en README.md):
+  - Assets/ThirdParty/Bike/VintageBicycle: "Vintage Bicycle" de VladNeko
+    (CC BY 4.0, atribucion obligatoria; ver su LICENSE.txt).
+  - Assets/ThirdParty/TrafficLights/StoplightChile: "Stoplight from Chile -
+    Decayed" de Felipe Carvajal Brown (CC BY 4.0, atribucion obligatoria).
   - Assets/ThirdParty/Vehicles: Quaternius (CC0) y "Montreal Bus" de Nick Ladd
     (CC BY 3.0, atribucion obligatoria; ver LEEME.txt y LICENSE.txt).
-  - Paquetes de la Unity Asset Store (licencia EULA de la Asset Store; no se
-    pueden redistribuir): "Versatile Studio Assets(cityAsset)",
-    "Traffic Lights System", "ARCADE - FREE Racing Car" y
-    "Understone(bikeModelAsset)".
-  - Paquetes de Unity y Meta instalados por el Package Manager.
+  - Assets/ThirdParty/Rocketbox: Microsoft Rocketbox (MIT, ver su LICENSE).
+  - Paquetes de Unity, Meta y osm2unity (BSD 3-Clause) instalados por el
+    Package Manager.

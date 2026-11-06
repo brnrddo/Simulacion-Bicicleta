@@ -529,7 +529,16 @@ La línea de detención es, por convención, el **final del carril de llegada**.
 
 ### 10.4 Implementación visual
 
-Las luces (`ResearchTrafficLight`, modelo `tl_simple_01` del asset *Traffic Lights System*) son solo visuales: muestran la fase que les asigna el controlador.
+Las luces (`ResearchTrafficLight`) son solo visuales: muestran la fase que les asigna el controlador.
+
+**Modelo (desde el 2026-11-06).** Es «Stoplight from Chile - Decayed» de Felipe Carvajal Brown (CC BY 4.0), en lugar del pack *Traffic Lights System* de la Asset Store, que no se puede redistribuir.
+- **Medidas:** poste curvo de 5.18 m, brazo de 2.42 m y cabezal a 5.08 m; el del pack tenía ~3.6 m de brazo y el cabezal a ~3.4 m.
+- **Color:** poste, base y caja en negro (`TL_Negro`), como en Santiago.
+- **Luces:** cada lente tiene materiales propios de encendida y apagada (`TL_Lente_*`), asignados por color en `ResearchTrafficLight` (campos `redOn`/`redOff`, etc.).
+- **Herramienta:** `SimBici > Build Signal Models` (`SignalModelBuilder.cs`). Conserva la jerarquía de cada semáforo (`TL_x / TL_k / tl_post_01 / tl_x_k`), así siguen funcionando el controlador, los halos y `IntersectionLaneBuilder`.
+  - Orienta el brazo hacia donde estaba el cabezal y deja las luces mirando al +Z local, como antes.
+  - Si el lado del brazo no coincide con el del modelo, usa una copia reflejada del poste, para que el brazo quede detrás de las luces. Ocurrió en los 16 semáforos.
+- **Prefabs:** se desempaquetaron las instancias de `Interseccion.prefab`, que contenía un prefab del pack.
 
 Como no hay bloom (Built-in RP sin post-procesado), cada lente encendida muestra además un **halo**: un quad aditivo de 0.8 m con degradado radial, para que las luces se vean en VR a 50–80 m. **[VERIFICAR]** su visibilidad en el visor.
 
@@ -807,7 +816,7 @@ $$
 - La mediana, el rango intercuartil y los límites son configurables en `TrafficManager`, para manipularlos por condición.
 - Con este recorte, aprox. 6.5 % de los sorteos queda en 3.0 m.
 - La distancia se mide **desde el extremo del manubrio hasta el costado del auto**.
-- **Medio ancho del manubrio:** *w*m/2 = 0.274 m (manubrio de 0.548 m medido en el modelo 3D de la bici). **[VERIFICAR]** con la bicicleta real.
+- **Medio ancho del manubrio:** *w*m/2 = 0.2845 m (manubrio de 0.569 m medido en el modelo 3D de la bici; hasta el 2026-11-06, 0.274 m con la BMX). **[VERIFICAR]** con la bicicleta real.
 - Generador propio: offset 2000 ([8](#8-reproducibilidad)).
 
 ### 13.3 Geometría y espacio disponible
@@ -965,7 +974,7 @@ Durante la pasada se mide en cada paso la **distancia mínima real**: desde los 
 | Mediana de *D* | 1.73 m | Beck et al. (2019) |
 | Rango intercuartil de *D* | 1.37–2.24 m | Beck et al. (2019) |
 | Recorte de *D* | [0.5, 3.0] m | Plan |
-| Medio manubrio | 0.274 m | Modelo 3D. **[VERIFICAR]** con la bici real |
+| Medio manubrio | 0.2845 m | Modelo 3D (Vintage Bicycle, desde el 2026-11-06). **[VERIFICAR]** con la bici real |
 | *a*lat,max | 1.0 m/s² | Plan |
 | Duración de la maniobra lateral | 2–4 s | Plan |
 | TTC mínimo con el de frente / margen | 5 s / 2 s | Rasch et al. (2020) |
@@ -1225,6 +1234,7 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | T6: peatones | Terminada; falta la prueba en el visor |
 | A1: vehículos (autos Quaternius y bus rojo) | Terminada; falta la prueba en el visor |
 | A2: ambientación de Santiago y ciclovía del anillo | Terminada; falta la prueba en el visor |
+| Modelos propios para publicar (bici y semáforos CC BY) | Terminada; falta la prueba en el visor |
 | T7: medición y logging de agentes | Pendiente |
 | T8: integración con el experimento | Pendiente |
 
@@ -1369,6 +1379,7 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | 2026-11-04 | Vehículos | Modelos más realistas que el primer pack propuesto: autos de Quaternius (CC0) y el bus «Montreal Bus» (CC BY) repintado rojo |
 | 2026-11-04 | Bus | Circula como tráfico normal, sin paraderos |
 | 2026-11-04 | Ambientación | Aprobada la lista de la hoja de referencia: PARE, placas, paraderos, baldosa, soleras amarillas, árboles con alcorque y tronco encalado, grifos, basureros, cordillera y bruma. Sin quioscos ni cables aéreos; se mantiene el modelo de los árboles |
+| 2026-11-06 | GitHub | Repositorio público sin los paquetes de la Asset Store, que no se pueden redistribuir. Bici y semáforos reemplazados por modelos CC BY: «Vintage Bicycle» y «Stoplight from Chile». Semáforo negro y bici sin cables |
 | 2026-11-04 | Ciclovía del anillo | Se descartó una bidireccional (2.0 m pintados es angosto). Queda solo la exterior, en un sentido, con aspecto chileno; la interior pasa a ser berma con solera amarilla. Las pistas de autos no se mueven |
 
 ---
@@ -1423,7 +1434,12 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | `scripts/Editor/IntersectionCurbFitter.cs` | `SimBici > Fit Intersections To Curbs`: líneas, pasos y postes según las soleras |
 | `ThirdParty/Rocketbox/Animations/InPlace/` | Clips de caminar en el lugar |
 | `Tests/EditMode/*.cs` | Tests |
-| `AssetsLab/CarTest.prefab`, `AssetsLab/Interseccion.prefab`, `AssetsLab/TrafficLights/*` | Prefabs y materiales del halo |
+| `AssetsLab/TrafficLights/*` | Materiales del halo, de las lentes y del poste; mallas del semáforo (`Generated/`) |
+| `scripts/Editor/SignalModelBuilder.cs` | `SimBici > Build Signal Models`: semáforo chileno en todos los semáforos |
+| `scripts/Editor/PlayerBikeModelBuilder.cs` | `SimBici > Build Player Bike Model`: bici del participante separada en piezas |
+| `AssetsLab/bike/Generated/` | Mallas de la bici (cuadro, manubrio con horquilla, ruedas) |
+| `ThirdParty/Bike/`, `ThirdParty/TrafficLights/` | Modelos CC BY de la bici y del semáforo, con sus licencias |
+| `README.md` (raíz) | Requisitos, apertura del proyecto y créditos de terceros |
 
 ---
 
@@ -1543,6 +1559,23 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 
 ---
 
+### 2026-11-06: modelos publicables (bici y semáforos)
+
+- **Bici del participante:** «Vintage Bicycle» de VladNeko (CC BY 4.0) en lugar de la BMX de Understone, con `SimBici > Build Player Bike Model`.
+  - **Separación:** el GLB viene separado por material, así que se separa por islas de malla conectada: cuadro, manubrio con horquilla, guardabarros y freno delanteros, y las dos ruedas. Se quitaron los 4 cables de freno y cambios, que no pueden seguir la dirección.
+  - **Medidas:** radio de rueda 0.334 m (la circunferencia de 2.1 m del sensor), distancia entre ejes 1.098 m, eje de dirección inclinado 23° y manubrio de 0.569 m.
+  - **Animación:** la rueda delantera es hija del manubrio y gira con la dirección. El centro del manubrio queda donde estaba el de la BMX (0.57 m delante del origen).
+  - Sin `MeshCollider` en las piezas; el choque usa `CollisionVolume`, como antes.
+  - **[VERIFICAR] en el visor:** la posición del manubrio respecto de la cabeza, porque el seguimiento está en modo piso.
+- **Semáforos:** modelo chileno, negro ([10.4](#104-implementación-visual)).
+- **Importación de GLB:** paquete glTFast 6.20.0, que trae Burst como dependencia. El simulador no usa Burst.
+- **Validación:**
+  - semáforos cambiando de fase con los materiales correctos;
+  - 0 autos superpuestos, 0 interbloqueos y 0 acercamientos auto–peatón;
+  - 9.0–9.3 ms por frame en el Editor (7.0 ms del hilo principal) y ~165 lotes, antes 10.3–11.1 ms y ~215 lotes;
+  - 53 de 53 tests.
+- **Git:** se quitaron del repositorio y del historial los paquetes de la Asset Store (Versatile, Traffic Lights System, ARCADE, Understone) y los prefabs que dependían de ellos (`CarTest`, `Interseccion`). Siguen en el disco local.
+
 ## 21. Referencias
 
 - Beck, B., Chong, D., Olivier, J., Perkins, M., Tsay, A., Rushford, A., Li, L., Cameron, P., Fry, R., & Johnson, M. (2019). How much space do drivers provide when passing cyclists? Understanding the impact of motor vehicle and infrastructure characteristics on passing distance. *Accident Analysis & Prevention, 128*, 253–260. https://doi.org/10.1016/j.aap.2019.03.007
@@ -1553,6 +1586,8 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 - Nazemi, M., et al. (2021). *Accident Analysis & Prevention, 151*, 105943. https://doi.org/10.1016/j.aap.2020.105943 (Citada en el plan.)
 - Rasch, A., Boda, C.-N., Thalya, P., Aderum, T., Knauss, A., & Dozza, M. (2020). How do oncoming traffic and cyclist lane position influence cyclist overtaking by drivers? *Accident Analysis & Prevention, 142*, 105569. https://doi.org/10.1016/j.aap.2020.105569
 - Treiber, M., Hennecke, A., & Helbing, D. (2000). Congested traffic states in empirical observations and microscopic simulations. *Physical Review E, 62*, 1805–1824.
+- Carvajal Brown, F. (2025). *Stoplight from Chile - Decayed* [modelo 3D]. Sketchfab, https://sketchfab.com/3d-models/stoplight-from-chile-decayed-5d41d46d0c3849e89de812f67c7de39f. Licencia CC BY 4.0. Modificado: escala, orientación, poste reflejado, color negro y materiales de las luces.
+- VladNeko (2020). *Vintage Bicycle* [modelo 3D]. Sketchfab, https://sketchfab.com/3d-models/vintage-bicycle-1795f6e907634afda88fdaf45f67b279. Licencia CC BY 4.0. Modificado: escala, separación en piezas y sin cables.
 - Hernández, J. (2016). *Estructura y composición del arbolado urbano de Santiago*. GEP, Universidad de Chile.
 - MINVU (2015). *Vialidad ciclo-inclusiva: recomendaciones de diseño*. Ministerio de Vivienda y Urbanismo de Chile.
 - Wikimedia Commons: fotos de referencia de Santiago (licencias CC BY y CC BY-SA, autores en `Documentacion/A2_referencias/referencias_Santiago.html`). Solo como referencia visual; no se incluyen en el proyecto.
