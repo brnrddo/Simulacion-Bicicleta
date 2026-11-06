@@ -19,3 +19,19 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---------------------------------------------------------------------------
+Alcance de esta licencia
+
+La licencia MIT de arriba cubre solo el codigo y las herramientas propias del
+proyecto (Assets/scripts, Assets/Tests, Assets/AssetsLab y Documentacion).
+
+El contenido de terceros conserva su propia licencia y NO queda bajo MIT:
+  - Assets/ThirdParty/Rocketbox: Microsoft Rocketbox (MIT, ver su LICENSE).
+  - Assets/ThirdParty/Vehicles: Quaternius (CC0) y "Montreal Bus" de Nick Ladd
+    (CC BY 3.0, atribucion obligatoria; ver LEEME.txt y LICENSE.txt).
+  - Paquetes de la Unity Asset Store (licencia EULA de la Asset Store; no se
+    pueden redistribuir): "Versatile Studio Assets(cityAsset)",
+    "Traffic Lights System", "ARCADE - FREE Racing Car" y
+    "Understone(bikeModelAsset)".
+  - Paquetes de Unity y Meta instalados por el Package Manager.
