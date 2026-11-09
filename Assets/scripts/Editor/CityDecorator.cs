@@ -8,14 +8,14 @@
 //   - Placas de calle negras con letras blancas y flecha de sentido, en dos
 //     esquinas de cada interseccion.
 //   - Paraderos de Red (refugio, banca, paneles sin marcas, senal de parada,
-//     solera amarilla de 12 m). El bus no se detiene.
+//     sin solera pintada). El bus no se detiene.
 //   - Vereda de baldosa 40 x 40 (textura propia proyectada en coordenadas de mundo).
-//   - Soleras amarillas: berma interior del anillo y 8 m junto a las esquinas.
-//   - Arboles existentes: base del tronco encalada y alcorque en la vereda.
+//   - Arboles existentes: cuadrado de tierra de 1 m al pie (solo visual).
 //   - Grifos amarillos y basureros en la franja junto a la solera.
 //   - Cordillera nevada al oriente (cerros bajos al poniente) y bruma leve.
-// Lo que va sobre la vereda lleva NavMeshModifier no caminable; al final se rehace
-// el setup de peatones (conserva la densidad elegida).
+// Lo que va sobre la vereda lleva NavMeshModifier no caminable y un BoxCollider en
+// la capa StaticObstacle (choque de la bici); al final se rehace el setup de peatones
+// (conserva la densidad elegida).
 // ============================================================
 
 using System.Collections.Generic;
@@ -52,7 +52,6 @@ public static class CityDecorator
         (-60f, "PEDRO DE VALDIVIA"), (4f, "RICARDO LYON"), (60f, "LOS LEONES"),
     };
 
-    private const float CurbPaintEndsM = 8f;          // solera amarilla junto a las esquinas [VERIFICAR]
     private const float ClearWalkM = 1.8f;            // paso libre minimo para peatones detras del mobiliario
     private const float CrosswalkKeepOutM = 2.5f;     // mobiliario lejos de los pasos peatonales
 
@@ -70,6 +69,15 @@ public static class CityDecorator
         public System.Random rng;
         public readonly List<GameObject> temp = new List<GameObject>();
         public readonly List<(Vector2 p, float r)> obstacles = new List<(Vector2, float)>();
+        public readonly List<(string name, Vector3 center, Vector3 size, Quaternion rot)> colliders =
+            new List<(string, Vector3, Vector3, Quaternion)>();
+
+        /// <summary>Colision del mobiliario para la bici (BoxCollider en StaticObstacle). 'along' = eje del largo (size.z).</summary>
+        public void Collide(string name, Vector3 center, Vector3 size, Vector3 along)
+        {
+            along.y = 0f;
+            colliders.Add((name, center, size, along.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(along.normalized, Vector3.up) : Quaternion.identity));
+        }
         public Crosswalk[] crosswalks;
         public List<TrafficLane> lanes;
         public RingBikeLaneEditor.Ring ring;
@@ -245,15 +253,12 @@ public static class CityDecorator
 
     // Paleta (color por vertice, lineal)
     private static readonly Color Yellow = VC(0.93f, 0.74f, 0.06f);
-    private static readonly Color CurbYellow = VC(0.92f, 0.76f, 0.12f);
+    private static readonly Color Soil = VC(0.20f, 0.15f, 0.10f);
     private static readonly Color PoleDark = VC(0.10f, 0.10f, 0.11f);
     private static readonly Color SteelGray = VC(0.36f, 0.37f, 0.39f);
     private static readonly Color RoofGray = VC(0.48f, 0.49f, 0.50f);
     private static readonly Color RedAccent = VC(0.72f, 0.08f, 0.10f);
     private static readonly Color BinGreen = VC(0.09f, 0.22f, 0.15f);
-    private static readonly Color Whitewash = VC(0.90f, 0.90f, 0.88f);
-    private static readonly Color Soil = VC(0.22f, 0.16f, 0.11f);
-    private static readonly Color Concrete = VC(0.58f, 0.58f, 0.56f);
     private static readonly Color Black = VC(0.05f, 0.05f, 0.05f);
 
     // ============================================================
@@ -285,37 +290,33 @@ public static class CityDecorator
             var root = new GameObject(RootName);
             Undo.RegisterCreatedObjectUndo(root, RootName);
             var walk = Child(root.transform, "Veredas");        // obstaculos para el NavMesh de peatones
-            var road = Child(root.transform, "Soleras");
+            var trees = Child(root.transform, "Arboles");    // solo visual: no bloquea a los peatones
             var far = Child(root.transform, "Fondo");
-            var trees = Child(root.transform, "Arboles");   // solo adorno: los arboles no eran obstaculo para los peatones
             var mod = walk.gameObject.AddComponent<NavMeshModifier>();
             mod.overrideArea = true;
             mod.area = 1;  // Not Walkable
 
             var deco = new Chunks();
-            var treeDeco = new Chunks();
             var signs = new Geo();
-            var paint = new Chunks();
+            var soil = new Chunks();
 
             log.AppendLine(ApplyPare());
             log.AppendLine(ApplySidewalkTiles());
             var atlas = new SignAtlas();
-            log.AppendLine(Trees(ctx, treeDeco));
-            var stops = BusStops(ctx, deco, signs, atlas, paint, log);
+            BusStops(ctx, deco, signs, atlas, log);
+            log.AppendLine(TreeSoil(ctx, soil));
             log.AppendLine(StreetPlates(ctx, deco, signs, atlas));
-            log.AppendLine(CurbPaint(ctx, paint, stops));
             log.AppendLine(Hydrants(ctx, deco));
             log.AppendLine(Bins(ctx, deco));
 
             var decorMat = RingBikeLaneEditor.DecorMaterial();
             foreach (var kv in deco.cells.OrderBy(k => k.Key))
                 AddMesh(walk, $"Mobiliario_{kv.Key.Item1}_{kv.Key.Item2}", kv.Value.ToMesh($"Decor_Mobiliario_{kv.Key.Item1}_{kv.Key.Item2}", false), decorMat, true);
-            foreach (var kv in treeDeco.cells.OrderBy(k => k.Key))
-                AddMesh(trees, $"Arboles_{kv.Key.Item1}_{kv.Key.Item2}", kv.Value.ToMesh($"Decor_Arboles_{kv.Key.Item1}_{kv.Key.Item2}", false), decorMat, false);
-            foreach (var kv in paint.cells.OrderBy(k => k.Key))
-                AddMesh(road, $"Solera_amarilla_{kv.Key.Item1}_{kv.Key.Item2}", kv.Value.ToMesh($"Decor_Solera_{kv.Key.Item1}_{kv.Key.Item2}", false), decorMat, false);
+            foreach (var kv in soil.cells.OrderBy(k => k.Key))
+                AddMesh(trees, $"Tierra_{kv.Key.Item1}_{kv.Key.Item2}", kv.Value.ToMesh($"Decor_Tierra_{kv.Key.Item1}_{kv.Key.Item2}", false), decorMat, false);
             if (signs.v.Count > 0) AddMesh(walk, "Letreros", signs.ToMesh("Decor_Letreros", true), atlas.Material(), true);
             AddMesh(far, "Cordillera", BuildMountains(ctx.rng), decorMat, false);
+            log.AppendLine(Colliders(ctx, root.transform));
             log.AppendLine(ApplyFog());
 
             foreach (var t in root.GetComponentsInChildren<Transform>()) GameObjectUtility.SetStaticEditorFlags(t.gameObject, StaticEditorFlags.BatchingStatic | StaticEditorFlags.OccludeeStatic);
@@ -431,8 +432,8 @@ public static class CityDecorator
         hit.collider.gameObject.layer == LayerMask.NameToLayer("Ground") && !(hit.collider is TerrainCollider);
 
     /// <summary>
-    /// Solera a la derecha del carril en s: cara de la solera (a nivel de calzada), normal hacia la vereda
-    /// y altura de la vereda. False si a la derecha no hay vereda con solera (boca de calle, rebaje).
+    /// Solera a la derecha del carril en s: borde de la vereda plana (en y = 0), normal hacia la vereda y altura
+    /// de la vereda. False si a la derecha no hay vereda con solera (boca de calle, rebaje).
     /// </summary>
     private static bool CurbAt(Ctx ctx, TrafficLane l, float s, out Vector3 face, out Vector3 n, out Vector3 fwd, out float top)
     {
@@ -444,13 +445,16 @@ public static class CityDecorator
         while (x < 12f && OnRoad(p + n * x)) x += 0.05f;
         if (x >= 12f) return false;
         Vector3 edge = p + n * x;
-        // Cara de la solera: primer punto (cada 2 cm desde 0.3 m antes del borde de la calzada) con vereda debajo
-        for (float d = -0.3f; d <= 0.6f; d += 0.02f)
+        // Borde de la vereda plana: primer punto (cada 2 cm desde 0.6 m antes del fin del collider de la calzada,
+        // que sigue bajo la vereda) donde un rayo vertical encuentra la vereda. La cara inclinada de la solera
+        // no la ven los rayos.
+        for (float d = -0.6f; d <= 0.6f; d += 0.02f)
         {
-            if (float.IsNaN(ctx.SidewalkY(edge + n * d))) continue;
+            float y = ctx.SidewalkY(edge + n * d);
+            if (float.IsNaN(y)) continue;
             face = new Vector3(edge.x, 0f, edge.z) + n * d;
-            top = ctx.SidewalkY(face + n * 0.1f);
-            return !float.IsNaN(top) && top > 0.15f;
+            top = y;
+            return top > 0.15f;
         }
         return false;
     }
@@ -493,67 +497,11 @@ public static class CityDecorator
     }
 
     // ============================================================
-    // Arboles: base encalada y alcorque
-    // ============================================================
-    private static string Trees(Ctx ctx, Chunks deco)
-    {
-        var g = GameObject.Find("City/Trees");
-        if (g == null) return "  AVISO: no hay City/Trees";
-        int nTrees = 0, nPits = 0;
-        foreach (Transform tree in g.transform)
-        {
-            Vector3 basePos = tree.position;
-            float r = TrunkRadius(tree);
-            float y0 = ctx.SidewalkY(basePos);
-            bool onWalk = !float.IsNaN(y0) && y0 > 0.15f;
-            float gy = onWalk ? y0 : basePos.y;
-            var geo = deco.At(basePos);
-            geo.Cylinder(new Vector3(basePos.x, gy - 0.02f, basePos.z), Vector3.up, r + 0.015f, 1.05f, 12, Whitewash, false, false);
-            nTrees++;
-            if (!onWalk) continue;
-            // Alcorque de tierra de 1.2 m con borde de hormigon
-            Vector3 fwd = tree.forward; fwd.y = 0f; if (fwd.sqrMagnitude < 1e-4f) fwd = Vector3.forward;
-            fwd.Normalize();
-            Vector3 right = new Vector3(fwd.z, 0f, -fwd.x);
-            float h = 0.6f, yS = y0 + 0.004f;
-            Vector3 c = new Vector3(basePos.x, yS, basePos.z);
-            geo.Quad(c + (-right - fwd) * h, c + (-right + fwd) * h, c + (right + fwd) * h, c + (right - fwd) * h, Vector3.up, Soil);
-            foreach (var (d, side) in new[] { (fwd, right), (-fwd, right), (right, fwd), (-right, fwd) })
-                geo.Box(c + d * (h - 0.03f) + Vector3.up * 0.012f, side, new Vector3(0.06f, 0.025f, 2f * h), Concrete, false);
-            nPits++;
-        }
-        return $"  Arboles: {nTrees} troncos encalados, {nPits} alcorques";
-    }
-
-    /// <summary>Radio del tronco: vertices entre 0.3 y 0.9 m de altura cerca del pie del arbol (percentil 80).</summary>
-    private static float TrunkRadius(Transform tree)
-    {
-        var d = new List<float>();
-        Vector2 c = new Vector2(tree.position.x, tree.position.z);
-        foreach (var mf in tree.GetComponentsInChildren<MeshFilter>())
-        {
-            if (mf.sharedMesh == null || !mf.sharedMesh.isReadable) continue;
-            var m = mf.transform.localToWorldMatrix;
-            foreach (var v in mf.sharedMesh.vertices)
-            {
-                Vector3 w = m.MultiplyPoint3x4(v);
-                float dy = w.y - tree.position.y;
-                if (dy < 0.3f || dy > 0.9f) continue;
-                float r = (new Vector2(w.x, w.z) - c).magnitude;
-                if (r < 0.6f) d.Add(r);
-            }
-        }
-        if (d.Count < 4) return 0.15f;
-        d.Sort();
-        return Mathf.Clamp(d[(int)(d.Count * 0.8f)], 0.08f, 0.4f);
-    }
-
-    // ============================================================
     // Paraderos
     // ============================================================
     private struct StopSite { public TrafficLane lane; public float s; }
 
-    private static List<StopSite> BusStops(Ctx ctx, Chunks deco, Geo signs, SignAtlas atlas, Chunks paint, StringBuilder log)
+    private static List<StopSite> BusStops(Ctx ctx, Chunks deco, Geo signs, SignAtlas atlas, StringBuilder log)
     {
         var sites = new List<StopSite>();
         if (!ctx.hasRing) { log.AppendLine("  AVISO: sin anillo, no hay paraderos"); return sites; }
@@ -649,6 +597,7 @@ public static class CityDecorator
                 TexQuad(signs, pc + t * (side * 0.052f), t * side, 1.1f, 1.7f, ad);
         }
         ctx.Block(c, Mathf.Max(halfL, halfD) + 0.2f);
+        ctx.Collide("Paradero", c + n * 0.05f + Vector3.up * 1.31f, new Vector3(ShelterDepthM + 0.3f, 2.62f, ShelterLengthM + 0.3f), t);
 
         // Senal de parada: placa oscura en poste, de frente al trafico que llega
         CurbAt(ctx, lane, s - 3f, out Vector3 f2, out Vector3 n2, out Vector3 t2, out float y2);
@@ -660,6 +609,7 @@ public static class CityDecorator
         foreach (float side in new[] { -1f, 1f })
             TexQuad(signs, plateC + t2 * (side * 0.021f), t2 * side, 0.50f, 0.76f, sr);
         ctx.Block(pole, 0.3f);
+        ctx.Collide("Senal_parada", pole + Vector3.up * 1.5f, new Vector3(0.12f, 3.0f, 0.12f), t2);
     }
 
     /// <summary>Quad vertical con una casilla del atlas, visible desde el lado de 'normal' (la imagen queda derecha para ese observador).</summary>
@@ -707,6 +657,7 @@ public static class CityDecorator
                 Plate(g, signs, atlas, p + Vector3.up * 2.72f, Vector3.right, ring, 0);
                 Plate(g, signs, atlas, p + Vector3.up * 2.45f, Vector3.forward, side, sideDir);
                 ctx.Block(p, 0.3f);
+                ctx.Collide("Placa_calle", p + Vector3.up * 1.475f, new Vector3(0.12f, 2.95f, 0.12f), Vector3.forward);
                 placedHere++; poles++; plates += 2;
             }
         }
@@ -762,53 +713,37 @@ public static class CityDecorator
     }
 
     // ============================================================
-    // Soleras amarillas
+    // Arboles: cuadrado de tierra al pie (para que no salgan de la baldosa)
     // ============================================================
-    private static string CurbPaint(Ctx ctx, Chunks paint, List<StopSite> stops)
+    private const float SoilSquareM = 1.0f;
+
+    private static string TreeSoil(Ctx ctx, Chunks soil)
     {
-        float total = 0f;
+        var g = GameObject.Find("City/Trees");
+        if (g == null) return "  AVISO: no hay City/Trees";
+        // Direccion de la calle mas cercana (carriles cada 2 m) para alinear el cuadrado con la vereda
+        var dirs = new List<(Vector2 p, Vector3 f)>();
         foreach (var l in ctx.lanes)
         {
             float len = LaneLength(l);
-            if (len < 4f) continue;
-            var strip = new List<(Vector3 face, Vector3 n, float top)>();
-            for (float s = 0.25f; s <= len - 0.25f; s += 0.5f)
-            {
-                bool want = s < CurbPaintEndsM || s > len - CurbPaintEndsM || stops.Any(st => st.lane == l && Mathf.Abs(st.s - s) <= 6f);
-                bool ok = false;
-                if (CurbAt(ctx, l, s, out Vector3 face, out Vector3 n, out _, out float top))
-                {
-                    if (!want && ctx.hasRing)
-                    {
-                        float o = ctx.ring.Offset(face);   // berma interior del anillo
-                        want = o < -(ctx.ring.HalfWidth - 0.6f) && o > -(ctx.ring.HalfWidth + 0.8f);
-                    }
-                    if (want && !ctx.NearCrosswalk(face, 0.3f)) { strip.Add((face, n, top)); ok = true; }
-                }
-                if (!ok) { total += EmitCurbStrip(paint, strip); strip.Clear(); }
-            }
-            total += EmitCurbStrip(paint, strip);
+            for (float s = 0f; s <= len; s += 2f) { Vector3 p = LanePoint(l, s, out Vector3 f); dirs.Add((new Vector2(p.x, p.z), f)); }
         }
-        return $"  Soleras amarillas: {total:F0} m";
-    }
-
-    private static float EmitCurbStrip(Chunks paint, List<(Vector3 face, Vector3 n, float top)> pts)
-    {
-        if (pts.Count < 2) return 0f;
-        float len = 0f;
-        for (int i = 1; i < pts.Count; i++)
+        int n = 0;
+        foreach (Transform tree in g.transform)
         {
-            var (a, na, ta) = pts[i - 1];
-            var (b, nb, tb) = pts[i];
-            if ((b - a).magnitude > 1.2f) continue;
-            len += (b - a).magnitude;
-            var g = paint.At(a);
-            Vector3 a0 = a - na * 0.008f, b0 = b - nb * 0.008f;
-            g.Quad(a0 + Vector3.up * 0.003f, a0 + Vector3.up * (ta + 0.002f), b0 + Vector3.up * (tb + 0.002f), b0 + Vector3.up * 0.003f, -(na + nb), CurbYellow);
-            g.Quad(a0 + Vector3.up * (ta + 0.004f), a + na * 0.14f + Vector3.up * (ta + 0.004f),
-                   b + nb * 0.14f + Vector3.up * (tb + 0.004f), b0 + Vector3.up * (tb + 0.004f), Vector3.up, CurbYellow);
+            Vector3 b = tree.position;
+            float y = ctx.SidewalkY(b);
+            if (float.IsNaN(y) || y <= 0.15f) continue;   // solo los que estan en la vereda
+            Vector2 q = new Vector2(b.x, b.z);
+            Vector3 fwd = Vector3.forward; float best = float.PositiveInfinity;
+            foreach (var (p, f) in dirs) { float d = (p - q).sqrMagnitude; if (d < best) { best = d; fwd = f; } }
+            Vector3 right = new Vector3(fwd.z, 0f, -fwd.x);
+            float h = SoilSquareM * 0.5f;
+            Vector3 c = new Vector3(b.x, y + 0.004f, b.z);
+            soil.At(c).Quad(c + (-right - fwd) * h, c + (-right + fwd) * h, c + (right + fwd) * h, c + (right - fwd) * h, Vector3.up, Soil);
+            n++;
         }
-        return len;
+        return $"  Arboles: {n} cuadrados de tierra de {SoilSquareM:F1} m";
     }
 
     // ============================================================
@@ -830,6 +765,7 @@ public static class CityDecorator
                 p.y = top;
                 Hydrant(deco.At(p), p, -nrm);
                 ctx.Block(p, 0.35f);
+                ctx.Collide("Grifo", p + Vector3.up * 0.36f, new Vector3(0.34f, 0.72f, 0.34f), fwd);
                 n++;
                 break;
             }
@@ -867,6 +803,7 @@ public static class CityDecorator
                     p.y = top;
                     Bin(deco.At(p), p, nrm, fwd);
                     ctx.Block(p, 0.4f);
+                    ctx.Collide("Basurero", p + nrm * 0.12f + Vector3.up * 0.55f, new Vector3(0.48f, 1.1f, 0.46f), fwd);
                     n++;
                     break;
                 }
@@ -882,6 +819,25 @@ public static class CityDecorator
         g.Cylinder(c, Vector3.up, 0.2f, 0.5f, 14, BinGreen, true, false);
         g.Cylinder(c + Vector3.up * 0.5f, Vector3.up, 0.215f, 0.04f, 14, VC(0.14f, 0.30f, 0.20f), false, false);
         g.Cylinder(c + Vector3.up * 0.46f, Vector3.up, 0.19f, 0.001f, 14, Black, false, true);
+    }
+
+    // ============================================================
+    // Colisiones del mobiliario (la bici choca en la capa StaticObstacle, como con faroles y arboles)
+    // ============================================================
+    private static string Colliders(Ctx ctx, Transform root)
+    {
+        var parent = Child(root, "Colisiones");
+        int layer = LayerMask.NameToLayer("StaticObstacle");
+        int i = 0;
+        foreach (var (name, center, size, rot) in ctx.colliders)
+        {
+            var go = new GameObject($"{name}_{i++:D3}");
+            go.transform.SetParent(parent, false);
+            go.transform.SetPositionAndRotation(center, rot);
+            if (layer >= 0) go.layer = layer;
+            go.AddComponent<BoxCollider>().size = size;
+        }
+        return $"  Colisiones del mobiliario: {ctx.colliders.Count} (capa StaticObstacle)";
     }
 
     // ============================================================

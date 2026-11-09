@@ -44,6 +44,9 @@ public class PedestrianManager : MonoBehaviour
     [SerializeField] private Vector2 speedRangeMps = new Vector2(PedestrianRules.SpeedMin, PedestrianRules.SpeedMax);
     [SerializeField] private Vector2 destinationDistanceM = new Vector2(30f, 200f);
     [SerializeField, Range(0f, 1f)] private float idleProbability = 0.3f;
+    [Tooltip("Probabilidad de aceptar un destino que obliga a cruzar la calzada (1 = cualquier destino). Con valores " +
+             "bajos los peatones pasean mas por su lado de la calle y no se acumulan en los pocos pasos peatonales. [VERIFICAR]")]
+    [SerializeField, Range(0f, 1f)] private float crossingProbability = 0.35f;
     [SerializeField] private Vector2 idleDurationS = new Vector2(2f, 8f);
 
     [Header("Cruces")]
@@ -92,6 +95,9 @@ public class PedestrianManager : MonoBehaviour
     private double simTimeS;
     private NavMeshPath path;
     private float totalAreaWeight;
+    // Triangulos del NavMesh en el area "Vereda", con su area acumulada: puntos uniformes sobre la vereda real
+    private readonly List<Vector3> walkTris = new List<Vector3>();
+    private readonly List<float> walkTrisCum = new List<float>();
     private SocialForce.Params sfm;
     private const float CellM = 4f;
     private readonly Dictionary<long, List<PedestrianAgent>> grid = new Dictionary<long, List<PedestrianAgent>>();
@@ -128,6 +134,7 @@ public class PedestrianManager : MonoBehaviour
             return;
         }
         foreach (var b in sidewalkAreas) totalAreaWeight += AreaWeight(b);
+        BuildWalkTriangles(vereda);
         sfm = new SocialForce.Params
         {
             tauS = sfmTauS, a = sfmA, b = sfmB, anticipationS = sfmAnticipationS, lambda = sfmLambda,
@@ -496,13 +503,16 @@ public class PedestrianManager : MonoBehaviour
             a.Corners = null;
             return true;
         }
-        for (int attempt = 0; attempt < 6; attempt++)
+        for (int attempt = 0; attempt < 10; attempt++)
         {
             if (!RandomSidewalkPoint(out Vector3 p)) continue;
             float d = (p - from).magnitude;
             if (d < destinationDistanceM.x || d > destinationDistanceM.y) continue;
             if (!NavMesh.CalculatePath(from, p, WalkableMask, path) || path.status != NavMeshPathStatus.PathComplete) continue;
             if (path.corners.Length < 2) continue;
+            // Un sorteo por intento (orden estable): los destinos al otro lado de la calzada se aceptan solo a veces
+            bool acceptCrossing = rng.NextDouble() < crossingProbability;
+            if (!acceptCrossing && PathCrossesRoad(path.corners)) continue;
             a.Corners = path.corners;
             a.CornerIndex = 1;
             a.Destination = p;
@@ -512,9 +522,56 @@ public class PedestrianManager : MonoBehaviour
         return false;
     }
 
+    /// <summary>True si el camino pasa por la calzada de algun paso peatonal.</summary>
+    private bool PathCrossesRoad(Vector3[] corners)
+    {
+        for (int i = 1; i < corners.Length; i++)
+        {
+            Vector3 a = corners[i - 1], b = corners[i];
+            int n = Mathf.Max(1, Mathf.CeilToInt(Vector3.Distance(a, b)));
+            for (int k = 0; k <= n; k++)
+            {
+                Vector3 q = Vector3.Lerp(a, b, k / (float)n);
+                foreach (var cw in crosswalks) if (cw.IsOnRoadPart(q)) return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Triangulos del NavMesh del area Vereda y su area acumulada (para sortear puntos uniformes).</summary>
+    private void BuildWalkTriangles(int veredaArea)
+    {
+        walkTris.Clear(); walkTrisCum.Clear();
+        if (veredaArea < 0) return;
+        var tri = NavMesh.CalculateTriangulation();
+        float cum = 0f;
+        for (int i = 0; i + 2 < tri.indices.Length; i += 3)
+        {
+            if (tri.areas[i / 3] != veredaArea) continue;
+            Vector3 a = tri.vertices[tri.indices[i]], b = tri.vertices[tri.indices[i + 1]], c = tri.vertices[tri.indices[i + 2]];
+            float area = Vector3.Cross(b - a, c - a).magnitude * 0.5f;
+            if (area < 1e-4f) continue;
+            cum += area;
+            walkTris.Add(a); walkTris.Add(b); walkTris.Add(c);
+            walkTrisCum.Add(cum);
+        }
+    }
+
     private bool RandomSidewalkPoint(out Vector3 point)
     {
         point = default;
+        // Uniforme sobre la superficie de vereda del NavMesh (si no hay triangulacion, por zonas como antes)
+        if (walkTrisCum.Count > 0)
+        {
+            float pick = (float)rng.NextDouble() * walkTrisCum[walkTrisCum.Count - 1];
+            int lo = 0, hi = walkTrisCum.Count - 1;
+            while (lo < hi) { int mid = (lo + hi) / 2; if (walkTrisCum[mid] < pick) lo = mid + 1; else hi = mid; }
+            float u = (float)rng.NextDouble(), v = (float)rng.NextDouble();
+            if (u + v > 1f) { u = 1f - u; v = 1f - v; }
+            Vector3 a = walkTris[3 * lo], b = walkTris[3 * lo + 1], c = walkTris[3 * lo + 2];
+            point = a + (b - a) * u + (c - a) * v;
+            return true;
+        }
         double r = rng.NextDouble() * totalAreaWeight;
         Bounds area = sidewalkAreas[sidewalkAreas.Count - 1];
         foreach (var b in sidewalkAreas) { r -= AreaWeight(b); if (r <= 0) { area = b; break; } }

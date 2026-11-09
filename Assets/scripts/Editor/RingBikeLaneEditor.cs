@@ -39,7 +39,7 @@ public static class RingBikeLaneEditor
     private const float CrosswalkMarginM = 0.6f;
     private const float MinRunM = 1.5f;
 
-    private const float TachonSpacingM = 2.5f;      // [VERIFICAR] espaciamiento con el Manual de Senalizacion
+    private const float TachonSpacingM = 1.5f;      // [VERIFICAR] espaciamiento con el Manual de Senalizacion
     private const float TachonEndClearM = 1.5f;
     private const float MarkY = 0.012f;             // sobre las lineas (0.01) para no parpadear
 
@@ -200,7 +200,7 @@ public static class RingBikeLaneEditor
             {
                 Vector3 p = PointOnRun(run, s, out Vector3 dir);
                 AddFrustum(verts, cols, tris, new Vector3(p.x, 0f, p.z), dir,
-                           new Vector2(0.15f, 0.35f), new Vector2(0.09f, 0.25f), 0.05f, yellow, black);
+                           new Vector2(0.22f, 0.45f), new Vector2(0.14f, 0.33f), 0.08f, yellow, black);   // tachon clasico 45 x 22 x 8 cm [VERIFICAR]
                 tachones++;
             }
         }

@@ -153,10 +153,10 @@ La calzada pintada del circuito mide 12 m. Se adoptó este perfil:
 
 | Franja (de exterior a interior) | Ancho | Marcas |
 |---|---|---|
-| Ciclovía exterior, un sentido (el de los carriles `Lane_Main_*`) | 2.4 m | Línea de separación **continua** con tachones amarillos y negros cada 2.5 m [VERIFICAR] y pictograma de bicicleta con flecha |
+| Ciclovía exterior, un sentido (el de los carriles `Lane_Main_*`) | 2.4 m | Línea de separación **continua** con tachones amarillos y negros de 45 × 22 × 8 cm cada 1.5 m (desde el 2026-11-09; antes 35 × 15 × 5 cm cada 2.5 m) [VERIFICAR]. El manual MINVU (sección 5.4) no fija medidas: dependen del tipo de tachón y remite al capítulo 7 del Manual de Señalización de Tránsito. Pictograma de bicicleta con flecha |
 | Carril de autos | 3.6 m | — |
 | Carril de autos (sentido contrario) | 3.6 m | — |
-| **Berma** interior (antes, la otra ciclovía) | 2.4 m | Línea de borde continua y solera amarilla; sin pictogramas |
+| **Berma** interior (antes, la otra ciclovía) | 2.4 m | Línea de borde continua, sin pictogramas |
 
 - **Ciclista en sentido interior** (`Lane_Main2_*`): va junto a la solera de la berma, a 0.75 m, como en las calles sin ciclovía ([12.1](#121-generación-simbici--generate-cyclist-network)).
 - **Herramienta:** `SimBici > Build Ring Bike Lane` (`RingBikeLaneEditor.cs`).
@@ -179,10 +179,9 @@ Se hizo a partir de las fotos de referencia de `Documentacion/A2_referencias/ref
 |---|---|---|
 | Señal **PARE** | Octógono rojo con «PARE» en vez del sprite «STOP» del pack de la ciudad, con la misma medida (0.9 m) | 3 |
 | **Placas de calle** | Negras con letras blancas y recuadro de flecha (doble en las avenidas; simple, en el sentido de tránsito, en las calles de un sentido), doble faz, 1.0 × 0.22 m, en un poste de 2.95 m. Dos esquinas opuestas por intersección | 20 placas en 10 postes |
-| **Paraderos** | Refugio gris de 4.0 × 1.4 m con faja roja, banca, dos paneles con una ilustración genérica sin marcas, señal de parada oscura («PARADA», código y recorridos ficticios) 3 m antes, y solera amarilla de 12 m. **El bus no se detiene** | 4 (dos en la berma interior, dos en el borde exterior) |
+| **Paraderos** | Refugio gris de 4.0 × 1.4 m con faja roja, banca, dos paneles con una ilustración genérica sin marcas, señal de parada oscura («PARADA», código y recorridos ficticios) 3 m antes. **El bus no se detiene** | 4 (dos en la berma interior, dos en el borde exterior) |
 | **Vereda de baldosa** | Baldosa microvibrada gris de 40 × 40 cm con 4 × 4 pastillas. Se proyecta en coordenadas de mundo (`SimBici/WorldTile`) porque las UV de las veredas del pack tienen otra escala en cada eje | 49 veredas |
-| **Solera amarilla** | Cara y canto de la solera en toda la berma interior, 8 m junto a cada esquina [VERIFICAR] y 12 m en los paraderos | 829 m |
-| **Árboles** | Se mantienen los 80 actuales, con la base del tronco encalada (1 m) y un alcorque de tierra de 1.2 m con borde de hormigón | 80 troncos, 78 alcorques |
+| **Árboles** | Se mantienen los 80 actuales, con un cuadrado de tierra de 1 m al pie, alineado con la calle (solo visual). Desde el 2026-11-09; antes llevaban tronco encalado y alcorque con borde, que el tronco atravesaba | 78 (los que están en la vereda) |
 | **Grifos** | Amarillos, a 0.45 m de la solera, de 6 a 12 m después del inicio de una cuadra (60 % de las cuadras) | 11 |
 | **Basureros** | Verde oscuro, en poste, a 0.55 m de la solera, cada 50–65 m | 32 |
 | **Cordillera y bruma** | Anillo de cerros a 560–790 m (dentro del plano lejano de 1000 m desde cualquier punto de la ciudad). Al oriente, cumbres de hasta ~165 m, unos 7–10° sobre el horizonte, como los Andes vistos desde Providencia, con nieve. Al poniente, cerros bajos. Bruma exponencial de densidad 0.0005 [VERIFICAR en el visor] | 1 |
@@ -193,7 +192,11 @@ Se hizo a partir de las fotos de referencia de `Documentacion/A2_referencias/ref
 - sin chocar con árboles, faroles ni postes, ni con lo ya colocado;
 - con **paso libre de 1.8 m** para peatones detrás de grifos, basureros y paraderos.
 
-**NavMesh.** Lo que va sobre la vereda (grupo `Veredas`) tiene un `NavMeshModifier` no caminable. Los alcorques y troncos encalados (grupo `Arboles`) **no** lo tienen, porque los árboles tampoco eran obstáculo antes: así son solo adorno. Con los alcorques no caminables, los peatones se congestionaban (ver [17.2](#172-pruebas-de-simulación)).
+**Colisión (desde el 2026-11-09).** Paraderos, señales de parada, postes de placas, grifos y basureros tienen un `BoxCollider` en la capa `StaticObstacle` (grupo `Colisiones`, 61 piezas): la bici los detecta como choque, igual que faroles, árboles y edificios. Los postes de semáforo tienen un `CapsuleCollider` en la misma capa ([10.4](#104-implementación-visual)).
+
+**Solera amarilla: quitada (2026-11-09).** Se probó pintar la solera en la berma, en las esquinas y en los paraderos, y Bernardo prefirió sin. La solera de estas veredas es una cara inclinada (submalla `Border`) que los rayos verticales no detectan; la última versión copiaba esos triángulos en amarillo.
+
+**NavMesh.** Lo que va sobre la vereda (grupo `Veredas`) tiene un `NavMeshModifier` no caminable. La tierra de los árboles (grupo `Arboles`) **no** lo tiene: es solo visual, y los árboles tampoco eran obstáculo antes. Con alcorques no caminables (primera versión), los peatones se congestionaban (ver [17.2](#172-pruebas-de-simulación)).
 
 **Nombres de calles [VERIFICAR] con Bernardo.** Son ficticios, tomados de Providencia:
 
@@ -539,6 +542,7 @@ Las luces (`ResearchTrafficLight`) son solo visuales: muestran la fase que les a
   - Orienta el brazo hacia donde estaba el cabezal y deja las luces mirando al +Z local, como antes.
   - Si el lado del brazo no coincide con el del modelo, usa una copia reflejada del poste, para que el brazo quede detrás de las luces. Ocurrió en los 16 semáforos.
 - **Prefabs:** se desempaquetaron las instancias de `Interseccion.prefab`, que contenía un prefab del pack.
+- **Colisión (2026-11-09):** cada poste tiene un `CapsuleCollider` (radio 0.12 m, alto del poste) en la capa `StaticObstacle`; antes los semáforos no tenían colisión.
 
 Como no hay bloom (Built-in RP sin post-procesado), cada lente encendida muestra además un **halo**: un quad aditivo de 0.8 m con degradado radial, para que las luces se vean en VR a 50–80 m. **[VERIFICAR]** su visibilidad en el visor.
 
@@ -1061,13 +1065,19 @@ $$N = \operatorname{round}\left(\rho \cdot \frac{L_{vereda}}{100}\right)$$
 
 *ρ* = `pedestriansPer100m` (configurable por condición; 2 por defecto, lo que da 47 peatones) y *L*vereda = 2 359 m.
 
-**Aparición:** al iniciar, en puntos al azar de las veredas, ponderados por el largo de cada vereda y a más de 25 m del ciclista. **Nunca aparecen ni desaparecen a la vista.**
+**Aparición:** al iniciar, en puntos al azar de las veredas y a más de 25 m del ciclista. **Nunca aparecen ni desaparecen a la vista.**
+
+**Puntos al azar (desde el 2026-11-09).** Se sortean **uniformes sobre la superficie de vereda**: un triángulo del NavMesh del área «Vereda», con probabilidad proporcional a su área, y un punto uniforme dentro de él. Antes se sorteaban en la caja que envuelve cada vereda, ponderada por su largo. En las veredas curvas del anillo esa caja es casi toda vacía, así que los puntos se pegaban a los bordes y la ocupación quedaba dispareja.
 
 **Velocidad de marcha** (Knoblauch et al., 1996), sorteada por peatón:
 
 $$v \sim N(1.35,\ 0.20^2)\ \text{m/s, recortada a } [0.9,\ 1.8]$$
 
 **Destinos:** un punto de vereda al azar entre 30 y 200 m. El camino se calcula con `NavMesh.CalculatePath` (veredas y cruces). Al llegar, con probabilidad 0.3 se queda quieto entre 2 y 8 s; si no, elige otro destino.
+
+- **Cruces (desde el 2026-11-09):** un destino cuyo camino pasa por la calzada de un paso peatonal se acepta con probabilidad `crossingProbability` = 0.35 [VERIFICAR]; si no, se prueba otro (hasta 10 intentos, un sorteo por intento).
+- **Por qué:** solo hay 8 pasos peatonales, todos en las dos intersecciones con semáforo, y las manzanas solo se conectan por ahí, así que antes casi todo viaje terminaba en esos pasos. Con este filtro los amontonamientos bajan, aunque la proporción de peatones cerca de los pasos cambia poco ([17.2](#172-pruebas-de-simulación)).
+- Para repartirlos más habría que agregar pasos peatonales en otras esquinas (decisión pendiente).
 
 **Movimiento: modelo de fuerza social (2026-10-13).** Antes era cinemático (seguir las esquinas a velocidad constante) y los peatones no se esquivaban entre sí. Ahora, en cada `FixedUpdate`, cada peatón tiene una velocidad **v** que cambia con una aceleración (Helbing & Molnár, 1995):
 
@@ -1329,6 +1339,26 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
   - **Superposiciones:** 0 pares de autos superpuestos.
   - **Rendimiento en el Editor:** 10.2–10.5 ms por frame (8.2 ms del hilo principal), con 162–166 lotes de dibujo. El costo extra frente a antes viene de los 189 peatones con fuerza social, no de los vehículos.
 
+- **Arreglos del 2026-11-09** (3 min en nivel 2, ~50 autos y 189 peatones):
+
+  - **Distribución de peatones**, comparada con el muestreo anterior (cajas por vereda y cualquier destino):
+
+    | Métrica | Antes | Ahora |
+    |---|---|---|
+    | Peatones a < 10 m de un paso peatonal | 21 % | 18 % |
+    | Peatones esperando cruzar | 8.8 % | 8.1 % |
+    | Máximo de peatones en una celda de 20 m | 10.6 | 7.8 |
+    | Variación entre celdas de 20 m (CV) | 1.09 | 1.03 |
+    | Pares a < 0.45 m (frames) | 3 698 | 258 |
+    | Trabados > 6 s | 2 | 1 |
+    | Cruces | 139 | 112 |
+    | Duración de cruce (p50 / p90) | 10.0 / 13.3 s | 10.1 / 12.9 s |
+
+  - **Tráfico:** 0 pares de autos superpuestos, 0 interbloqueos y 0 acercamientos auto–peatón. Un auto quedó detenido en la mitad izquierda de `Lane_North_01` (calle de un sentido; limitación ya conocida, [16](#16-estado-pendientes-y-limitaciones)).
+  - **Colisión:** las 61 piezas de mobiliario y los postes de semáforo están en capas que detecta `CollisionDetector`.
+  - **Rendimiento en el Editor:** 9.5–10.5 ms por frame.
+  - **Tests:** 53 de 53 pasan.
+
 - **Ambientación (A2, 2026-11-04;** 3 min en nivel 2, ~50 autos y 189 peatones**):**
 
   - **Tráfico:** 0 pares de autos superpuestos, 0 autos detenidos en el carril contrario más de 3 s, 0 interbloqueos auto–peatón y 0 acercamientos auto–peatón a menos de 0.3 m.
@@ -1379,8 +1409,10 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | 2026-11-04 | Vehículos | Modelos más realistas que el primer pack propuesto: autos de Quaternius (CC0) y el bus «Montreal Bus» (CC BY) repintado rojo |
 | 2026-11-04 | Bus | Circula como tráfico normal, sin paraderos |
 | 2026-11-04 | Ambientación | Aprobada la lista de la hoja de referencia: PARE, placas, paraderos, baldosa, soleras amarillas, árboles con alcorque y tronco encalado, grifos, basureros, cordillera y bruma. Sin quioscos ni cables aéreos; se mantiene el modelo de los árboles |
+| 2026-11-09 | Ambientación | Sin solera amarilla. Árboles solo con un cuadrado de tierra (el tronco atravesaba el encalado). Tachones más grandes. Colisión para el mobiliario nuevo y los postes de semáforo |
+| 2026-11-09 | Peatones | Repartirlos mejor: puntos uniformes sobre la vereda y menos destinos que obligan a cruzar |
 | 2026-11-06 | GitHub | Repositorio público sin los paquetes de la Asset Store, que no se pueden redistribuir. Bici y semáforos reemplazados por modelos CC BY: «Vintage Bicycle» y «Stoplight from Chile». Semáforo negro y bici sin cables |
-| 2026-11-04 | Ciclovía del anillo | Se descartó una bidireccional (2.0 m pintados es angosto). Queda solo la exterior, en un sentido, con aspecto chileno; la interior pasa a ser berma con solera amarilla. Las pistas de autos no se mueven |
+| 2026-11-04 | Ciclovía del anillo | Se descartó una bidireccional (2.0 m pintados es angosto). Queda solo la exterior, en un sentido, con aspecto chileno; la interior pasa a ser berma (con solera amarilla hasta el 2026-11-09). Las pistas de autos no se mueven |
 
 ---
 
@@ -1575,6 +1607,15 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
   - 9.0–9.3 ms por frame en el Editor (7.0 ms del hilo principal) y ~165 lotes, antes 10.3–11.1 ms y ~215 lotes;
   - 53 de 53 tests.
 - **Git:** se quitaron del repositorio y del historial los paquetes de la Asset Store (Versatile, Traffic Lights System, ARCADE, Understone) y los prefabs que dependían de ellos (`CarTest`, `Interseccion`). Siguen en el disco local.
+
+### 2026-11-09: arreglos tras la revisión en el visor
+
+- **Hitbox de la bici:** la caja de choque (`CollisionVolume`) seguía donde estaba la BMX (z de −0.8 a 0.8 m) y la rueda delantera quedaba fuera. Ahora la ajusta `Build Player Bike Model`: 1.781 m de largo, 0.569 m de ancho (el manubrio) y 1.80 m de alto, centrada en la bici (z = 0.339 m).
+- **Tachones:** 45 × 22 × 8 cm cada 1.5 m ([4.3](#43-perfil-transversal-del-circuito)).
+- **Solera amarilla:** quitada.
+- **Árboles:** cuadrado de tierra de 1 m en vez del tronco encalado y el alcorque.
+- **Colisión:** mobiliario nuevo (61 piezas) y postes de semáforo en la capa `StaticObstacle` ([4.4](#44-ambientación-de-santiago-a2)).
+- **Peatones:** puntos uniformes sobre la vereda y filtro de destinos que cruzan ([14.4](#144-peatones-ambientales-pedestrianmanager)).
 
 ## 21. Referencias
 

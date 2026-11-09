@@ -70,6 +70,7 @@ public static class SignalModelBuilder
         Part pole = new Part(), body = new Part();
         var lens = new Dictionary<string, Part> { ["LuzRoja"] = new Part(), ["LuzAmarilla"] = new Part(), ["LuzVerde"] = new Part() };
         Vector3 headOffset;
+        float poleHeight;
         float modelHand;   // lado del brazo respecto de las luces en el modelo (+1 / -1)
         try
         {
@@ -81,6 +82,7 @@ public static class SignalModelBuilder
             Vector3 arm = Flat(headC - foot).normalized;
             Vector3 facing = Flat(B("LuzRoja").center - frameB.center).normalized;
             float poleH = (B("Poste").max.y - baseB.min.y) * ModelScale;
+            poleHeight = poleH;
             log.AppendLine($"  Modelo: poste de {poleH:F2} m; brazo de {Flat(headC - foot).magnitude * ModelScale:F2} m; cabezal a {(headC.y - foot.y) * ModelScale:F2} m; angulo luces-brazo {Vector3.Angle(arm, facing):F0} grados");
 
             Quaternion poleFrame = Quaternion.Inverse(Quaternion.LookRotation(Vector3.Cross(arm, Vector3.up), Vector3.up)) ;
@@ -146,6 +148,12 @@ public static class SignalModelBuilder
             post.localScale = new Vector3(1f / ls.x, 1f / ls.y, 1f / ls.z);   // sin la escala 0.8 del grupo
             post.rotation = Quaternion.LookRotation(Vector3.Cross(arm, Vector3.up), Vector3.up);   // brazo en +X
             postMf.sharedMesh = mirror ? poleMeshMirror : poleMesh;
+            // Colision del poste para la bici (capa StaticObstacle, como faroles y senales)
+            var cap = post.GetComponent<CapsuleCollider>();
+            if (cap == null) cap = Undo.AddComponent<CapsuleCollider>(post.gameObject);
+            cap.direction = 1; cap.radius = 0.12f; cap.height = poleHeight; cap.center = new Vector3(0f, poleHeight * 0.5f, 0f);
+            int obstacle = LayerMask.NameToLayer("StaticObstacle");
+            if (obstacle >= 0) post.gameObject.layer = obstacle;
             post.GetComponent<MeshRenderer>().sharedMaterials = pole.mats.ToArray();
 
             head.position = post.TransformPoint(mirror ? Vector3.Scale(headOffset, new Vector3(1f, 1f, -1f)) : headOffset);

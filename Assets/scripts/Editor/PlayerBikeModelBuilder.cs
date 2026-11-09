@@ -18,6 +18,7 @@
 //   Handlebar (handlebarTransform) / RuedaDelantera (frontWheelTransform)
 // La rueda delantera es hija del manubrio para girar con la direccion. Las mallas
 // se hornean en el espacio local de cada pieza (sin escalas en los transforms).
+// La caja de choque (CollisionVolume) se ajusta al largo de la bici y al manubrio.
 // ============================================================
 
 using System.Collections.Generic;
@@ -190,15 +191,28 @@ public static class PlayerBikeModelBuilder
             log.AppendLine($"  Manubrio: {barWidth:F3} m de ancho; punos a {gripsCenter.y:F2} m de altura y {gripsCenter.z:F2} m delante del centro de la bici");
             log.AppendLine($"  Distancia entre ejes: {Vector3.Distance(hubFr, hubRr):F3} m");
 
+            // Volumen de la bici en el espacio de la raiz (para la caja de choque)
+            Bounds bikeBounds = new Bounds(Vector3.zero, Vector3.zero);
+            bool first = true;
+            foreach (var kv in pieces)
+                foreach (var v in kv.Value.v)
+                {
+                    Vector3 w = frames[kv.Key].MultiplyPoint3x4(v);
+                    if (first) { bikeBounds = new Bounds(w, Vector3.zero); first = false; }
+                    else bikeBounds.Encapsulate(w);
+                }
+            log.AppendLine($"  Bici: {bikeBounds.size.z:F3} m de largo, {bikeBounds.size.y:F3} m de alto");
+
             // 7) Prefab
-            log.Append(ApplyToPrefab(meshes, pieces, frames, gripsCenter, barWidth));
+            log.Append(ApplyToPrefab(meshes, pieces, frames, gripsCenter, barWidth, bikeBounds));
         }
         finally { Object.DestroyImmediate(tmp); }
         return log.ToString();
     }
 
     private static string ApplyToPrefab(Dictionary<Part, Mesh> meshes, Dictionary<Part, Piece> pieces,
-                                        Dictionary<Part, Matrix4x4> frames, Vector3 gripsCenter, float barWidth)
+                                        Dictionary<Part, Matrix4x4> frames, Vector3 gripsCenter, float barWidth,
+                                        Bounds bikeBounds)
     {
         var log = new StringBuilder();
         var root = PrefabUtility.LoadPrefabContents(PrefabPath);
@@ -256,6 +270,18 @@ public static class PlayerBikeModelBuilder
                 so2.FindProperty("handlebar").objectReferenceValue = bar.GetComponent<MeshRenderer>();
                 so2.ApplyModifiedPropertiesWithoutUndo();
             }
+            // Caja de choque (CollisionDetector): el largo de la bici, el ancho del manubrio y la altura del ciclista
+            var cv = root.transform.Find("CollisionVolume");
+            var box = cv != null ? cv.GetComponent<BoxCollider>() : null;
+            if (box != null)
+            {
+                float height = Mathf.Max(box.size.y, bikeBounds.size.y);
+                Vector3 c = vis.localPosition + bikeBounds.center - cv.localPosition;
+                box.center = new Vector3(0f, height * 0.5f, c.z);
+                box.size = new Vector3(Mathf.Max(barWidth, bikeBounds.size.x), height, bikeBounds.size.z);
+                log.AppendLine($"  Caja de choque: centro z {box.center.z:F3} m, {box.size.x:F3} x {box.size.y:F2} x {box.size.z:F3} m");
+            }
+            else log.AppendLine("  AVISO: no se encontro CollisionVolume con BoxCollider");
             PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             log.AppendLine($"  Prefab guardado: {PrefabPath} (manubrio {barWidth:F3} m)");
         }
