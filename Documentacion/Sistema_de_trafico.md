@@ -318,7 +318,7 @@ Normal estándar por Box–Muller con `System.Random`: *z* = √(−2 ln *u*₁)
 | `Veh_SUV` | Quaternius SUV | 4.21 × 2.11 × 1.53 | 20 | Sorteado |
 | `Veh_Taxi` | Quaternius Taxi | 4.22 × 1.81 × 1.31 | 8 | Negro con techo amarillo, como en Santiago |
 | `Veh_Coupe` | Quaternius SportsCar2 | 3.93 × 1.87 × 1.20 | 5 | Sorteado |
-| `Veh_BusRed` | «Montreal Bus» de Nick Ladd | 12.00 × 2.55 × 3.20 | 3 | Rojo con faldón blanco |
+| `Veh_BusRed` | «Montreal Bus» de Nick Ladd | 12.00 × 2.55 × 3.20 | 6 (3 hasta el 2026-11-09); **máximo 2 a la vez** | Rojo con faldón blanco |
 
 - **Licencias:** los autos de Quaternius son CC0. El bus es **CC BY 3.0**, con atribución obligatoria ([21](#21-referencias)).
 - **Bus:** se repintó con la combinación rojo y blanco de Red Movilidad, sin logos, y se le quitó la flecha de la librea original. **[VERIFICAR]** la librea.
@@ -327,6 +327,7 @@ Normal estándar por Box–Muller con `System.Random`: *z* = √(−2 ln *u*₁)
 **Armado de los prefabs (`SimBici > Build Vehicle Prefabs`).**
 
 1. **Orientación:** el modelo se gira con su eje principal en planta (análisis de componentes principales de los vértices) y el frente hacia +Z. El frente se reconoce por los focos; en el bus se verificó con una captura lateral.
+   **Nivelación (desde el 2026-11-09):** se ajusta un plano al punto más bajo de cada cuadrante (las cuatro ruedas) y se gira el modelo para dejarlo horizontal, si la inclinación está entre 0.2 y 8°. El bus venía inclinado 2.35°: se veía torcido y con ruedas en el aire. Ahora sus ruedas quedan a menos de 2 cm del suelo. Los autos no necesitaron corrección.
 2. **Escala:** solo el bus se escala, a 12 × 2.55 × 3.2 m.
 3. **Posición:** el modelo se centra en planta y se apoya en el suelo.
 4. **Taxi:** su material amarillo se divide por altura, de modo que lo que está sobre 0.98 m queda amarillo (techo) y lo de abajo negro.
@@ -1410,6 +1411,7 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | 2026-11-04 | Bus | Circula como tráfico normal, sin paraderos |
 | 2026-11-04 | Ambientación | Aprobada la lista de la hoja de referencia: PARE, placas, paraderos, baldosa, soleras amarillas, árboles con alcorque y tronco encalado, grifos, basureros, cordillera y bruma. Sin quioscos ni cables aéreos; se mantiene el modelo de los árboles |
 | 2026-11-09 | Ambientación | Sin solera amarilla. Árboles solo con un cuadrado de tierra (el tronco atravesaba el encalado). Tachones más grandes. Colisión para el mobiliario nuevo y los postes de semáforo |
+| 2026-11-09 | Bus | Más frecuente, con un máximo de 2 a la vez |
 | 2026-11-09 | Peatones | Repartirlos mejor: puntos uniformes sobre la vereda y menos destinos que obligan a cruzar |
 | 2026-11-06 | GitHub | Repositorio público sin los paquetes de la Asset Store, que no se pueden redistribuir. Bici y semáforos reemplazados por modelos CC BY: «Vintage Bicycle» y «Stoplight from Chile». Semáforo negro y bici sin cables |
 | 2026-11-04 | Ciclovía del anillo | Se descartó una bidireccional (2.0 m pintados es angosto). Queda solo la exterior, en un sentido, con aspecto chileno; la interior pasa a ser berma (con solera amarilla hasta el 2026-11-09). Las pistas de autos no se mueven |
@@ -1607,6 +1609,13 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
   - 9.0–9.3 ms por frame en el Editor (7.0 ms del hilo principal) y ~165 lotes, antes 10.3–11.1 ms y ~215 lotes;
   - 53 de 53 tests.
 - **Git:** se quitaron del repositorio y del historial los paquetes de la Asset Store (Versatile, Traffic Lights System, ARCADE, Understone) y los prefabs que dependían de ellos (`CarTest`, `Interseccion`). Siguen en el disco local.
+
+### 2026-11-09: bus nivelado y más frecuente
+
+- **Bus nivelado:** el modelo venía inclinado 2.35°, con el lado derecho levantado y ruedas en el aire. `Build Vehicle Prefabs` ahora nivela cada modelo según el apoyo de sus ruedas ([5.3](#53-vehículos-y-mezcla-del-tráfico)).
+- **Frecuencia:** peso del bus de 3 a 6 en la mezcla (~6 % de las llegadas).
+- **Tope:** `TrafficManager.maxBuses` = 2. Si un spawner sortea un bus y ya circulan dos, sortea otro vehículo entre los demás con su propio generador; la secuencia sigue siendo reproducible.
+- **Validación** (3.5 min en nivel 2): en promedio 1.66 buses, siempre al menos uno, nunca más de 2; 0 autos superpuestos; 53 de 53 tests.
 
 ### 2026-11-09: arreglos tras la revisión en el visor
 

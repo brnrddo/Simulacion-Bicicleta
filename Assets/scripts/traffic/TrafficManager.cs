@@ -29,6 +29,8 @@ public class TrafficManager : MonoBehaviour
     [Tooltip("Multiplica el flujo de TODOS los spawners (1 = flujos nominales, 0.5 = la mitad, 2 = el doble). " +
              "Cambiar solo este valor para correr la misma escena con distintos niveles de trafico.")]
     [SerializeField, Min(0f)] private float flowMultiplier = 1f;
+    [Tooltip("Maximo de buses circulando a la vez. Si un spawner sortea un bus y ya estan todos, sortea otro vehiculo.")]
+    [SerializeField, Min(0)] private int maxBuses = 2;
     [Tooltip("Autos objetivo en la red con Flow Multiplier = 1. Objetivo = esto x Flow Multiplier. " +
              "Los spawners no generan por encima del objetivo y RingExitController regula las salidas.")]
     [SerializeField, Min(0)] private int vehiclesPerLevel = 30;
@@ -120,6 +122,15 @@ public class TrafficManager : MonoBehaviour
     public float BikeHalfLengthM => bikeLengthM * 0.5f;
     public float BikeSpeedMps => bike != null ? bike.CurrentSpeedMps : 0f;
     public int ActiveCount => vehicles.Count;
+
+    /// <summary>True si ya circulan tantos vehiculos de este tipo como permite su tope (hoy solo el bus).</summary>
+    public bool AtTypeLimit(string modelType)
+    {
+        if (modelType != "bus") return false;
+        int n = 0;
+        foreach (var v in vehicles) if (v.ModelType == "bus") n++;
+        return n >= maxBuses;
+    }
     public IReadOnlyList<TrafficVehicle> Vehicles => vehicles;
 
     private readonly List<TrafficLane> lanes = new List<TrafficLane>();

@@ -55,7 +55,7 @@ public static class VehiclePrefabBuilder
         new Spec { name = "Taxi", model = "QuaterniusCars/Taxi.fbx", type = "taxi", bodyMat = "Yellow", weight = 8,
                    recolor = { ["Yellow"] = new Color(0.06f, 0.06f, 0.07f) },
                    splitMat = "Yellow", splitAboveY = 0.98f, splitColor = new Color(0.95f, 0.78f, 0.10f) },
-        new Spec { name = "BusRed", model = "MontrealBus/MontrealBus.obj", type = "bus", weight = 3, wheelbase = 6.0f,
+        new Spec { name = "BusRed", model = "MontrealBus/MontrealBus.obj", type = "bus", weight = 6, wheelbase = 6.0f,
                    targetSize = new Vector3(2.55f, 3.2f, 12.0f), useBusProfile = true,
                    // Carroceria roja; la flecha de la librea original se pinta del mismo rojo (sin logos); grises claros en blanco
                    // Carroceria roja con faldon blanco; se quita la flecha de la librea de Montreal (sin logos)
@@ -108,6 +108,11 @@ public static class VehiclePrefabBuilder
         // Orientacion: eje principal en planta y frente (cristal delantero / focos) hacia +Z
         float yaw = ForwardYaw(model, spec);
         model.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
+
+        // Nivelar: algunos modelos vienen inclinados (el bus, ~2 grados de rueda a rueda). Plano por el punto mas
+        // bajo de cada cuadrante (las cuatro ruedas) y giro para dejarlo horizontal
+        float tilt = LevelModel(root, model);
+        if (tilt > 0f) log.AppendLine($"  {spec.name}: nivelado {tilt:F2} grados");
 
         // Escala (bus): a las dimensiones objetivo (ancho, alto, largo) en el marco del vehiculo
         if (spec.targetSize != Vector3.zero)
@@ -237,6 +242,55 @@ public static class VehiclePrefabBuilder
         float heading = Mathf.Atan2(axis.x, axis.z) * Mathf.Rad2Deg;   // rumbo del frente (0 = +Z)
         float yaw = -heading;
         return Mathf.Abs(yaw) < 0.5f ? 0f : yaw;
+    }
+
+    /// <summary>
+    /// Deja horizontal el plano de apoyo de las ruedas: el punto mas bajo de cada cuadrante (izquierda/derecha,
+    /// adelante/atras) y un plano y = a x + b z + c por esos cuatro puntos (minimos cuadrados). Gira el modelo solo
+    /// si la inclinacion esta entre 0.2 y 8 grados. Devuelve los grados corregidos (0 si no hizo nada).
+    /// </summary>
+    private static float LevelModel(GameObject root, GameObject model)
+    {
+        Bounds b = LocalBounds(root, model);
+        var low = new Vector3[4];
+        var has = new bool[4];
+        foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
+        {
+            if (mf.sharedMesh == null) continue;
+            foreach (var v in mf.sharedMesh.vertices)
+            {
+                Vector3 p = root.transform.InverseTransformPoint(mf.transform.TransformPoint(v));
+                int q = (p.x < b.center.x ? 0 : 1) + (p.z < b.center.z ? 0 : 2);
+                if (!has[q] || p.y < low[q].y) { low[q] = p; has[q] = true; }
+            }
+        }
+        if (!(has[0] && has[1] && has[2] && has[3])) return 0f;
+
+        // Minimos cuadrados para y = a x + b z + c
+        double sxx = 0, sxz = 0, szz = 0, sx = 0, sz = 0, sy = 0, sxy = 0, szy = 0;
+        foreach (var p in low) { sxx += p.x * p.x; sxz += p.x * p.z; szz += p.z * p.z; sx += p.x; sz += p.z; sy += p.y; sxy += p.x * p.y; szy += p.z * p.y; }
+        double n = 4;
+        var m = new double[3, 4] { { sxx, sxz, sx, sxy }, { sxz, szz, sz, szy }, { sx, sz, n, sy } };
+        for (int c = 0; c < 3; c++)                       // eliminacion de Gauss
+        {
+            int piv = c;
+            for (int r = c + 1; r < 3; r++) if (System.Math.Abs(m[r, c]) > System.Math.Abs(m[piv, c])) piv = r;
+            for (int k = 0; k < 4; k++) { var t = m[c, k]; m[c, k] = m[piv, k]; m[piv, k] = t; }
+            if (System.Math.Abs(m[c, c]) < 1e-12) return 0f;
+            for (int r = 0; r < 3; r++)
+            {
+                if (r == c) continue;
+                double f = m[r, c] / m[c, c];
+                for (int k = c; k < 4; k++) m[r, k] -= f * m[c, k];
+            }
+        }
+        float a = (float)(m[0, 3] / m[0, 0]), bz = (float)(m[1, 3] / m[1, 1]);
+        Vector3 normal = new Vector3(-a, 1f, -bz).normalized;
+        float tilt = Vector3.Angle(normal, Vector3.up);
+        if (tilt < 0.2f || tilt > 8f) return 0f;
+        // El giro se aplica en el marco de la raiz (el contenedor "Model" aun no tiene escala)
+        model.transform.localRotation = Quaternion.FromToRotation(normal, Vector3.up) * model.transform.localRotation;
+        return tilt;
     }
 
     /// <summary>Limites del modelo en el marco de la raiz.</summary>

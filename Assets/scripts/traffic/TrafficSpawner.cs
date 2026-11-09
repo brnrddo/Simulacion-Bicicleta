@@ -115,9 +115,11 @@ public class TrafficSpawner : MonoBehaviour
         // Cantidad estable: no generar por encima del objetivo del nivel de trafico (la llegada queda pendiente)
         if (manager.ActiveCount >= manager.TargetVehicles) return false;
 
+        // Si el vehiculo sorteado ya llego a su tope (p. ej. 2 buses), se sortea otro de los demas tipos
+        if (nextPrefab != null && manager.AtTypeLimit(nextPrefab.ModelType)) nextPrefab = null;
         if (nextPrefab == null)
         {
-            nextPrefab = PickPrefab();
+            nextPrefab = PickPrefab(manager);
             nextProfile = nextPrefab.ProfileOverride != null ? nextPrefab.ProfileOverride : driverProfile;  // p. ej. bus
             nextParams = nextProfile.Sample(rng, out nextSpeedFactor);
         }
@@ -173,18 +175,21 @@ public class TrafficSpawner : MonoBehaviour
         return true;
     }
 
-    private TrafficVehicle PickPrefab()
+    /// <summary>Sorteo ponderado (un solo numero al azar) entre los vehiculos que no llegaron a su tope.</summary>
+    private TrafficVehicle PickPrefab(TrafficManager manager)
     {
+        bool Allowed(VehicleOption v) => v.prefab != null && (manager == null || !manager.AtTypeLimit(v.prefab.ModelType));
         float total = 0f;
-        foreach (var v in vehicles) if (v.prefab != null) total += v.weight;
+        foreach (var v in vehicles) if (Allowed(v)) total += v.weight;
+        if (total <= 0f) return vehicles.Find(v => v.prefab != null).prefab;
         double r = rng.NextDouble() * total;
         foreach (var v in vehicles)
         {
-            if (v.prefab == null) continue;
+            if (!Allowed(v)) continue;
             r -= v.weight;
             if (r <= 0) return v.prefab;
         }
-        return vehicles.Find(v => v.prefab != null).prefab;
+        return vehicles.Find(Allowed).prefab;
     }
 
     private void OnDrawGizmos()
