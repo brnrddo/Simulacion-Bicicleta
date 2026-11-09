@@ -22,6 +22,9 @@ public class CyclistNetwork : MonoBehaviour
     [Tooltip("Calles sin ciclovia: distancia de la solera derecha al centro del ciclista (m). " +
              "Se mide la solera con rayos sobre la calzada.")]
     [Min(0.3f)] public float curbClearanceM = 0.75f;
+    [Tooltip("Junto a autos estacionados (ParkedVehicle): distancia del centro del ciclista al costado del auto (m). " +
+             "El camino se abre hacia la calzada con transiciones de 8 m.")]
+    [Min(0.3f)] public float parkedCarClearanceM = 1.0f;
     [Tooltip("Respaldo si no se encuentra la solera: distancia del eje del carril hacia la derecha (m).")]
     [Min(0f)] public float rightOfLaneOffsetM = 1.0f;
     [Tooltip("Prefijo de los objetos de marca de ciclovia pintados en las calles.")]

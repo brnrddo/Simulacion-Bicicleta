@@ -79,6 +79,10 @@ public class CyclistNetworkEditor : Editor
                              .Where(t => t.gameObject.activeInHierarchy && t.name.StartsWith(net.bikeMarkingPrefix))
                              .Select(t => t.position).ToList();
 
+        // Autos estacionados (escenografia): el camino junto a la solera los esquiva
+        var parked = Object.FindObjectsByType<ParkedVehicle>(FindObjectsSortMode.None)
+                           .OrderBy(p => p.name, System.StringComparer.Ordinal).ToList();
+
         // 1) Desplazamiento lateral de cada carril
         var profiles = new Dictionary<TrafficLane, Profile>();
         foreach (var l in road)
@@ -111,6 +115,8 @@ public class CyclistNetworkEditor : Editor
                 prof.constant = curb.HasValue ? curb.Value - net.curbClearanceM : net.rightOfLaneOffsetM;
                 prof.resolved = true;
                 if (!curb.HasValue) log.AppendLine($"  AVISO: no se encontro la solera de {l.name}; se usa {net.rightOfLaneOffsetM} m del eje");
+                int nParked = AvoidParked(l, len, prof, parked, net.parkedCarClearanceM);
+                if (nParked > 0) log.AppendLine($"  {l.name}: el camino esquiva {nParked} autos estacionados");
             }
             profiles[l] = prof;
         }
@@ -243,6 +249,36 @@ public class CyclistNetworkEditor : Editor
     }
 
     private const float ShortLaneM = 8f;
+    private const float ParkedTaperM = 8f;
+
+    /// <summary>
+    /// Junto a autos estacionados a la derecha del carril, el camino pasa a 'clearance' de su costado (por la
+    /// calzada), con transiciones lineales de ParkedTaperM antes y despues. Devuelve cuantos autos esquiva.
+    /// </summary>
+    private static int AvoidParked(TrafficLane l, float len, Profile prof, List<ParkedVehicle> parked, float clearance)
+    {
+        var spans = new List<(float s0, float s1, float offset)>();
+        foreach (var pv in parked)
+        {
+            Project(l, pv.transform.position, out float s, out float lat);
+            if (s < -ParkedTaperM || s > len + ParkedTaperM || lat < 0f || lat > 7f) continue;   // a la derecha del carril
+            spans.Add((s - pv.LengthM * 0.5f, s + pv.LengthM * 0.5f, lat - pv.WidthM * 0.5f - clearance));
+        }
+        if (spans.Count == 0) return 0;
+        prof.points.Clear();
+        for (float s = 0f; s <= len + 0.01f; s += 1f)
+        {
+            float off = prof.constant;
+            foreach (var (s0, s1, o) in spans)
+            {
+                float w = s < s0 ? Mathf.InverseLerp(s0 - ParkedTaperM, s0, s) : s > s1 ? 1f - Mathf.InverseLerp(s1, s1 + ParkedTaperM, s) : 1f;
+                if (w <= 0f) continue;
+                off = Mathf.Min(off, Mathf.Lerp(prof.constant, Mathf.Min(prof.constant, o), w));
+            }
+            prof.points.Add(new Vector2(s, off));
+        }
+        return spans.Count;
+    }
 
     private static void Inherit(Profile prof, Profile from, float offset)
     {

@@ -1411,6 +1411,7 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | 2026-11-04 | Bus | Circula como tráfico normal, sin paraderos |
 | 2026-11-04 | Ambientación | Aprobada la lista de la hoja de referencia: PARE, placas, paraderos, baldosa, soleras amarillas, árboles con alcorque y tronco encalado, grifos, basureros, cordillera y bruma. Sin quioscos ni cables aéreos; se mantiene el modelo de los árboles |
 | 2026-11-09 | Ambientación | Sin solera amarilla. Árboles solo con un cuadrado de tierra (el tronco atravesaba el encalado). Tachones más grandes. Colisión para el mobiliario nuevo y los postes de semáforo |
+| 2026-11-09 | Autos estacionados | Algunos, en grupos, en la berma interior frente a edificios; el ciclista va por la calle junto a ellos |
 | 2026-11-09 | Bus | Más frecuente, con un máximo de 2 a la vez |
 | 2026-11-09 | Peatones | Repartirlos mejor: puntos uniformes sobre la vereda y menos destinos que obligan a cruzar |
 | 2026-11-06 | GitHub | Repositorio público sin los paquetes de la Asset Store, que no se pueden redistribuir. Bici y semáforos reemplazados por modelos CC BY: «Vintage Bicycle» y «Stoplight from Chile». Semáforo negro y bici sin cables |
@@ -1609,6 +1610,20 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
   - 9.0–9.3 ms por frame en el Editor (7.0 ms del hilo principal) y ~165 lotes, antes 10.3–11.1 ms y ~215 lotes;
   - 53 de 53 tests.
 - **Git:** se quitaron del repositorio y del historial los paquetes de la Asset Store (Versatile, Traffic Lights System, ARCADE, Understone) y los prefabs que dependían de ellos (`CarTest`, `Interseccion`). Siguen en el disco local.
+
+### 2026-11-09: autos estacionados en la berma
+
+- **Herramienta:** `SimBici > Place Parked Cars` (`ParkedCarsEditor.cs`, semilla `CreateRng(20261109, 5100)`).
+  - **Dónde:** 20 autos en 8 grupos de 2 a 5, en la berma interior del anillo, solo frente a edificios (no frente al pasto). Ocupan ~52 % de los tramos elegibles.
+  - **Libre:** 12 m en los extremos de cada cuadra, 6 m en los pasos peatonales, 10 m en los paraderos y 3.5 m en los grifos.
+  - **Mezcla:** la del tráfico sin el bus, con colores sorteados.
+  - **Posición:** a 0.15–0.25 m del pie de la solera, que es el fin del collider de la calzada; la vereda plana empieza ~0.4 m más allá.
+- **Dibujo y colisión:** una sola malla estática con el color horneado. Cada auto es un objeto con `BoxCollider` en `StaticObstacle` y `ParkedVehicle`.
+- **Ciclista:** en esos tramos va por la calzada. `CyclistNetworkEditor` abre su camino a `parkedCarClearanceM` = 1.0 m del costado de los autos, con transiciones de 8 m, y el tráfico lo adelanta como en una calle sin ciclovía (decisión de Bernardo).
+- **Validación** (3.5 min en nivel 2):
+  - 0 roces entre el tráfico y los autos estacionados (distancia mínima 0.35 m; el costado de los estacionados queda a ≥ 1.82 m del eje de la pista);
+  - 0 autos superpuestos, nunca más de 2 buses.
+  - Una primera versión los ubicaba 0.6 m más afuera, porque medía la solera en el borde de la vereda plana, y el bus rozaba las SUV.
 
 ### 2026-11-09: bus nivelado y más frecuente
 
