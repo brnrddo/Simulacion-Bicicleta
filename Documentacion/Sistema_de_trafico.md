@@ -369,6 +369,23 @@ Normal estándar por Box–Muller con `System.Random`: *z* = √(−2 ln *u*₁)
 
 ---
 
+### 5.4 Sonido (desde el 2026-11-11)
+
+La bici no tiene sonido: el participante oye la real. `TrafficAudio` (objeto `Audio`, armado con `SimBici > Build Audio Setup`) es solo presentación y no cambia la simulación.
+
+- **Espacialización:** Meta XR Audio (paquete `com.meta.xr.sdk.audio` 209.0.0, HRTF), que es el espacializador del proyecto. Cada fuente 3D usa `spatialize = true`.
+- **Ambiente:** bucle 2D de 2 min con tráfico lejano de ciudad (grabación CC0 de janbezouska). Volumen 0.35.
+- **Vehículos:** un grupo de 10 voces 3D se asigna cada 0.1 s a los vehículos más cercanos al oyente (hasta 45 m), con entrada y salida suaves de 0.35 s. Atenuación logarítmica de 2 a 60 m. El Doppler lo calcula Unity y se anula 0.25 s al reasignar una voz, porque el salto de posición no es velocidad.
+  - **Autos:** motor en ralentí grabado (Peugeot 308, CC0 de Nox_Sound), con tono 0.9 + 0.035·*v* y volumen 0.35 + 0.012·*v*; más ruido de neumático procedural (pasabanda de 900 Hz y retumbo grave), con volumen ∝ (*v*/13.9)^1.5 y tono de 0.7 a 1.25.
+  - **Bus eléctrico:** casi sin motor. Neumático más grave (tono ×0.75) y fuerte (×1.4), zumbido del inversor (tono con armónicos de 300 Hz que sube con la velocidad) y murmullo de ventilación de 250 Hz. Ambos son procedurales.
+- **Volúmenes por categoría:** `AmbientVolume`, `CarVolume` y `BusVolume` (0–1), para manipularlos o apagarlos por condición. Se registran en el evento `audio_start`.
+- **Calibración [VERIFICAR] en el visor con un medidor de nivel:**
+  - auto a 50 km/h: ~70 dB(A) a 7.5 m (límite europeo de ruido de paso);
+  - bus eléctrico lento: 56–65 dB(A);
+  - ambiente: ~50 dB(A).
+- **Azar:** las fases de inicio de los bucles usan `CreateRng(semilla, 6000)`. El ruido procedural usa semillas fijas.
+- **Grabaciones:** en `Assets/ThirdParty/Audio`. El ambiente es el tramo de 35 a 155 s del original, cerrado en bucle con un fundido de 2 s y pasado a 16 bits; el motor solo se pasó a 16 bits.
+
 ## 6. Generación de demanda y nivel de tráfico
 
 ### 6.1 Llegadas
@@ -458,6 +475,8 @@ El ruteo es estocástico pero determinista: usa un generador con semilla propio 
   | 3100, … | Eventos de peatones (cada uno distinto) |
   | 4000 | Colores de carrocería |
   | 5000 | Decoración de la ciudad (en el Editor, semilla fija 20261104) |
+  | 5100 | Autos estacionados (en el Editor, semilla fija 20261109) |
+  | 6000 | Audio: fases de inicio de los bucles |
 
   Agregar un spawner no altera la secuencia de los demás.
 - **Orden estable:** los carriles, spawners, intersecciones y controladores se recorren ordenados por nombre; los autos, en orden de Id.
@@ -1411,6 +1430,7 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | 2026-11-04 | Bus | Circula como tráfico normal, sin paraderos |
 | 2026-11-04 | Ambientación | Aprobada la lista de la hoja de referencia: PARE, placas, paraderos, baldosa, soleras amarillas, árboles con alcorque y tronco encalado, grifos, basureros, cordillera y bruma. Sin quioscos ni cables aéreos; se mantiene el modelo de los árboles |
 | 2026-11-09 | Ambientación | Sin solera amarilla. Árboles solo con un cuadrado de tierra (el tronco atravesaba el encalado). Tachones más grandes. Colisión para el mobiliario nuevo y los postes de semáforo |
+| 2026-11-11 | Audio | Espacialización Meta XR, ambiente «Downtown LA» (Freesound, CC0), autos con motor grabado y neumático procedural, bus eléctrico procedural; bici sin sonido |
 | 2026-11-09 | Autos estacionados | Algunos, en grupos, en la berma interior frente a edificios; el ciclista va por la calle junto a ellos |
 | 2026-11-09 | Bus | Más frecuente, con un máximo de 2 a la vez |
 | 2026-11-09 | Peatones | Repartirlos mejor: puntos uniformes sobre la vereda y menos destinos que obligan a cruzar |
@@ -1610,6 +1630,12 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
   - 9.0–9.3 ms por frame en el Editor (7.0 ms del hilo principal) y ~165 lotes, antes 10.3–11.1 ms y ~215 lotes;
   - 53 de 53 tests.
 - **Git:** se quitaron del repositorio y del historial los paquetes de la Asset Store (Versatile, Traffic Lights System, ARCADE, Understone) y los prefabs que dependían de ellos (`CarTest`, `Interseccion`). Siguen en el disco local.
+
+### 2026-11-11: sonido
+
+- Ambiente de ciudad, autos y bus eléctrico con audio 3D (Meta XR Audio) y Doppler ([5.4](#54-sonido-desde-el-2026-11-11)). La bici, sin sonido.
+- **Grabaciones CC0 de Freesound:** ambiente de janbezouska y motor de Nox_Sound. El neumático y el bus se generan por código.
+- **Prueba en Play:** 10 voces asignadas a los vehículos cercanos, el bus con sus tres capas, sin errores nuevos y 10.2 ms por frame. Los niveles quedan por calibrar en el visor.
 
 ### 2026-11-09: autos estacionados en la berma
 

@@ -1,0 +1,7 @@
+"Downtown LA, Little Tokyo, late night semi distant traffic.wav"
+de janbezouska (https://freesound.org/people/janbezouska/sounds/330427/)
+Licencia: Creative Commons 0 (CC0 1.0, dominio publico).
+
+Uso en este proyecto: ambiente de ciudad de fondo. Descargado de Freesound el
+2026-11-11. Cambios: tramo de 120 s (35-155 s del original) cerrado en bucle con
+un fundido cruzado de 2 s y convertido a 16 bits.

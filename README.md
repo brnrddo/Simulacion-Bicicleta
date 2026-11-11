@@ -27,10 +27,12 @@ El código y las herramientas propias tienen licencia MIT (ver `LICENSE`). El co
 | [Stoplight from Chile - Decayed](https://sketchfab.com/3d-models/stoplight-from-chile-decayed-5d41d46d0c3849e89de812f67c7de39f) (semáforos) | [Felipe Carvajal Brown](https://sketchfab.com/brownmarcostudios) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) | `Assets/ThirdParty/TrafficLights/StoplightChile` |
 | Montreal Bus (bus rojo) | Nick Ladd | CC BY 3.0 | `Assets/ThirdParty/Vehicles/MontrealBus` |
 | LowPoly Cars | [Quaternius](https://quaternius.com) | CC0 | `Assets/ThirdParty/Vehicles/QuaterniusCars` |
+| [Downtown LA, Little Tokyo, late night semi distant traffic](https://freesound.org/people/janbezouska/sounds/330427/) (ambiente) | janbezouska | CC0 | `Assets/ThirdParty/Audio/AmbienteCiudad` |
+| [Peugeot 308 Idle Exterior Loop](https://freesound.org/people/Nox_Sound/sounds/522225/) (motor de los autos) | Nox_Sound | CC0 | `Assets/ThirdParty/Audio/MotorAuto` |
 | Microsoft Rocketbox (peatones) | Microsoft | MIT | `Assets/ThirdParty/Rocketbox` |
 | osm2unity (generación de la ciudad) | Institute of Automatic Control, RWTH Aachen | BSD 3-Clause | Paquete (`manifest.json`) |
 | glTFast, XR Interaction Toolkit, Splines, AI Navigation y otros | Unity Technologies | Licencias de cada paquete | Paquetes |
-| Meta XR SDK | Meta | Licencia del SDK | Paquete |
+| Meta XR SDK y Meta XR Audio | Meta | Licencia del SDK | Paquetes |
 
 **Cambios sobre los modelos de terceros:**
 
