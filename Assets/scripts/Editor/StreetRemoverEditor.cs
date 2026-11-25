@@ -8,9 +8,10 @@
 //     calle queda el pasto del terreno.
 //   - Quita el tramo de x = 4 (Ricardo Lyon) DENTRO del circuito: recorta la
 //     calzada hasta el eje del anillo (su malla es la misma de la calle x = -60,
-//     asi que se crea una copia recortada) y las 4 esquinas interiores. Se conservan las dos veredas
-//     laterales, con pasto entre ellas (paseo). Las soleras interiores de las dos
-//     rectas quedan continuas con tramos de vereda nuevos.
+//     asi que se crea una copia recortada) y las 4 esquinas interiores. Se apagan las dos
+//     veredas laterales y el tramo se rellena con tres edificios (Bernardo: sin pasto ni
+//     calzada entre C2 y C3). Las soleras interiores de las dos rectas quedan continuas
+//     con tramos de vereda nuevos.
 //   - Red: borra Lane_Extra, Cruce_SE (con su regulador de salida) y
 //     Lane_North_02; une los carriles del anillo que pasaban por Cruce_SE;
 //     Cruce_S_Centro y Cruce_N_Centro quedan en T; apaga el PARE del acceso sur
@@ -114,6 +115,8 @@ public static class StreetRemoverEditor
              s => s.max.x > -6f && s.max.x < -4f && s.center.z > 37f && s.center.z < 45f && s.size.x > 20f,
              s => s.min.x > 11f && s.min.x < 15f && s.center.z > 37f && s.center.z < 45f && s.size.x > 20f, log);
 
+        FillInnerBlockWithBuildings(log);
+
         // Calzada de x = 4: copia recortada (la original la comparte con x = -60)
         Transform street4 = null;
         foreach (Transform t in roads)
@@ -154,6 +157,84 @@ public static class StreetRemoverEditor
         log.AppendLine("  Siguiente: Align Lanes To Curb, Fit Intersections To Curbs, Generate Cyclist Network, " +
                        "Analyze Lane Room, Build Ring Bike Lane, Decorate City, Place Parked Cars, Validate Network.");
         return log.ToString();
+    }
+
+    // Edificios que rellenan el antiguo tramo de x = 4 entre las dos rectas del anillo (sur, centro, norte).
+    // Se copian bloques de la ciudad con casi la misma planta (22 x 25 m) y con color y altura distintos de
+    // los vecinos: Block_14 (cafe, 7 m), Block_19 (beige, 17.5 m) y Block_15 (blanco, 17.5 m).
+    private static readonly (string name, string source, float zMin, float zMax)[] InnerBlocks =
+    {
+        ("Block_E1_x4_S", "Block_14", -37.6f, -12.85f),
+        ("Block_E1_x4_C", "Block_19", -12.75f, 12.8f),
+        ("Block_E1_x4_N", "Block_15", 12.9f, 37.7f),
+    };
+    private const float InnerBlockWestX = -7.88f;   // fachada de Block_10, Block_34 (1) y Block_12
+    private const float InnerBlockEastX = 14.98f;   // fachada de Block_11, Block_26 (1) y Block_13
+
+    /// <summary>
+    /// Rellena con edificios el antiguo tramo de x = 4 dentro del circuito (Bernardo, 2026-11-25: sin pasto ni
+    /// calzada entre C2 y C3). Apaga las dos veredas laterales del tramo y agrega tres edificios copiados de la
+    /// ciudad, escalados a la manzana. Las veredas de las rectas del anillo quedan delante de ellos.
+    /// </summary>
+    public static string FillInnerBlockWithBuildings(StringBuilder log)
+    {
+        var city = GameObject.Find("City");
+        var buildings = city != null ? city.transform.Find("Buildings") : null;
+        if (buildings == null) { log.AppendLine("  AVISO: no hay City/Buildings"); return log.ToString(); }
+        if (buildings.Find(InnerBlocks[0].name) != null) { log.AppendLine("  Los edificios de x = 4 ya estaban"); return log.ToString(); }
+
+        foreach (var t in Children(city.transform.Find("Sidewalks")))
+        {
+            var b = Bounds(t); if (!b.HasValue) continue;
+            if (b.Value.center.x > -9f && b.Value.center.x < 16f && Mathf.Abs(b.Value.center.z) < 5f && b.Value.size.z > 50f)
+                Off(t.gameObject, log);
+        }
+
+        foreach (var (name, sourceName, zMin, zMax) in InnerBlocks)
+        {
+            var source = buildings.Find(sourceName);
+            if (source == null) { log.AppendLine($"  AVISO: no existe {sourceName}"); continue; }
+            var mesh = source.GetComponent<MeshFilter>().sharedMesh.bounds;
+            var go = Object.Instantiate(source.gameObject, buildings);
+            Undo.RegisterCreatedObjectUndo(go, name);
+            go.name = name;
+            go.transform.rotation = Quaternion.identity;
+            Vector3 scale = source.localScale;
+            scale.x = (InnerBlockEastX - InnerBlockWestX) / mesh.size.x;
+            scale.z = (zMax - zMin) / mesh.size.z;
+            go.transform.localScale = scale;
+            go.transform.position = new Vector3(InnerBlockWestX - scale.x * mesh.min.x, source.position.y, zMin - scale.z * mesh.min.z);
+            log.AppendLine($"  edificio nuevo {name} (copia de {sourceName}): x [{InnerBlockWestX:F2}, {InnerBlockEastX:F2}], " +
+                           $"z [{zMin:F2}, {zMax:F2}], escala {scale.x:F2} x {scale.z:F2}");
+        }
+        HideInsideInnerBlock(log);
+        return log.ToString();
+    }
+
+    /// <summary>
+    /// Apaga los faroles y arboles que quedaron dentro de los edificios nuevos de x = 4. Un mismo objeto
+    /// "Street Light(Clone)" de la ciudad tiene varios postes repartidos, asi que se revisa cada hijo.
+    /// </summary>
+    public static int HideInsideInnerBlock(StringBuilder log)
+    {
+        var city = GameObject.Find("City");
+        if (city == null) return 0;
+        bool Inside(Transform t)
+        {
+            var b = Bounds(t);
+            if (!b.HasValue) return false;
+            Vector3 c = b.Value.center;
+            return c.x > InnerBlockWestX && c.x < InnerBlockEastX && c.z > InnerBlocks[0].zMin && c.z < InnerBlocks[InnerBlocks.Length - 1].zMax;
+        }
+        int n = 0;
+        foreach (var group in new[] { "Street Lights", "Trees" })
+            foreach (var top in Children(city.transform.Find(group)).ToList())
+            {
+                if (Inside(top)) { Off(top.gameObject, log); n++; continue; }
+                foreach (var part in Children(top).ToList())
+                    if (Inside(part)) { Off(part.gameObject, log); n++; }
+            }
+        return n;
     }
 
     /// <summary>

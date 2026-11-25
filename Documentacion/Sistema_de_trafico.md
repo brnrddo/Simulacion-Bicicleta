@@ -135,9 +135,9 @@ Separar el cálculo de aceleraciones (fase 1) de la integración (fase 2) es la 
 **Cambios al mapa (E1, `SimBici > Remove Streets`, `StreetRemoverEditor.cs`).** Para el experimento de elección de ruta (C2 → C3 tiene dos caminos de largo parecido, por la curva este o por la oeste):
 
 - **Calle x = 60:** se quitaron la calzada, sus 2 esquinas de asfalto, sus 4 veredas, 6 árboles, 3 faroles y 28 marcas transversales que cruzaban el anillo. Queda el pasto del terreno. La solera exterior de la recta sur se cerró con un tramo de vereda nuevo de 17.5 m.
-- **Tramo de x = 4 dentro del circuito:** la calzada se recortó en el eje de las rectas del anillo (z = ±49.76), como la antigua T de x = 60. Su malla era la misma de la calle x = −60, así que se guardó una copia recortada (`Assets/AssetsLab/Generated/E1_Calle_RicardoLyon.asset`). Se quitaron las 4 esquinas interiores. Se conservaron las dos veredas laterales, con pasto entre ellas (un paseo entre los edificios). Las soleras interiores de las dos rectas se cerraron con tramos de vereda de 18 m, 1 cm más altos que los vecinos (como las esquinas originales) para que no parpadeen donde se superponen.
+- **Tramo de x = 4 dentro del circuito:** la calzada se recortó en el eje de las rectas del anillo (z = ±49.76), como la antigua T de x = 60. Su malla era la misma de la calle x = −60, así que se guardó una copia recortada (`Assets/AssetsLab/Generated/E1_Calle_RicardoLyon.asset`). Se quitaron las 4 esquinas interiores. Primero se dejó un paseo (las dos veredas laterales con pasto entre ellas); el mismo día, a pedido de Bernardo (sin pasto ni calzada entre C2 y C3), el tramo se **rellenó con tres edificios** copiados de la ciudad: `Block_E1_x4_S` (copia de `Block_14`, café, 7 m), `Block_E1_x4_C` (de `Block_19`, beige, 17.5 m) y `Block_E1_x4_N` (de `Block_15`, blanco, 17.5 m), escalados entre 0.99 y 1.14 a la manzana (x de −7.9 a 15.0). Se apagaron las dos veredas laterales y 3 postes de farol que quedaban dentro. Las soleras interiores de las dos rectas se cerraron con tramos de vereda de 18 m, 1 cm más altos que los vecinos (como las esquinas originales) para que no parpadeen donde se superponen.
 - **Red:** se borraron `Lane_Extra`, `Cruce_SE` (con `RingExitController`) y `Lane_North_02`. Los carriles del anillo que pasaban por `Cruce_SE` se unieron directo (`Lane_Main_01` → `Lane_Main_02` y `Lane_Main2_02` → `Lane_Main2_04`). I_SC e I_NC quedaron en T, y se apagó el PARE del acceso sur de I_NC.
-- **Nada de la geometría se borró:** quedó apagado con el sufijo ` (E1 off)` (53 objetos). Respaldo: `test_backup_2026-11-25_preE1.unity`.
+- **Nada de la geometría se borró:** quedó apagado con el sufijo ` (E1 off)` (58 objetos). Respaldos: `test_backup_2026-11-25_preE1.unity` y, antes de los edificios, `test_backup_2026-11-25_preEdificios.unity`.
 
 ### 4.2 Intersecciones
 
@@ -1696,10 +1696,10 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 
 ### 2026-11-25: cambios al mapa para el experimento de rutas (E1)
 
-- **Mapa:** se quitaron la calle x = 60 y el tramo de x = 4 dentro del circuito; I_SC e I_NC quedaron en T; nodos C1–C4 ([4.1](#41-topología)).
+- **Mapa:** se quitaron la calle x = 60 y el tramo de x = 4 dentro del circuito, que quedó como una manzana con tres edificios; I_SC e I_NC quedaron en T; nodos C1–C4 ([4.1](#41-topología)).
 - **Regulación de la salida:** se borró `RingExitController` ([6.4](#64-regulación-de-la-salida-quitada)).
 - **Herramientas:** las que miden la solera ahora solo ven la capa `Ground`; antes leían a los autos estacionados como solera ([16](#16-estado-pendientes-y-limitaciones)). `Build Pedestrian Setup` ya no cuenta las veredas apagadas.
-- **Regenerado:** carriles, intersecciones, red del ciclista, espacio lateral, ciclovía del anillo, decoración (44 veredas, 72 árboles, 16 placas en 8 postes, 57 colisiones), peatones (NavMesh de 779 triángulos, 178 peatones con 8 por 100 m) y autos estacionados (20 en 8 grupos).
+- **Regenerado:** carriles, intersecciones, red del ciclista, espacio lateral, ciclovía del anillo, decoración (42 veredas, 72 árboles, 16 placas en 8 postes, 57 colisiones), peatones (NavMesh de 755 triángulos sobre 2 075 m de vereda, 166 peatones con 8 por 100 m) y autos estacionados (20 en 8 grupos).
 - **Rutas a flujo libre** (`Validate Network`): C2 → C3 por la curva este 542 m / 44.1 s, por la oeste 552 m / 47.0 s; C4 → C1 directo 256 m / 18.4 s, por la curva oeste 423 m / 37.7 s; C2 → C1 y C4 → C3, 215 m / 22–23 s (la alternativa tarda 2.5 veces más).
 - **Validación** (9 min simulados con el ruteo por pesos, ×3): 0 autos superpuestos (separación mínima 1.25 m), 30 autos (el tope) y nunca más de 2 buses; un `traffic_deadlock` en el PARE de C2.
 
