@@ -4,8 +4,8 @@
 
 - **Proyecto:** `C:\Lab\Simulacion` (Unity), laboratorio de Ingeniería en Transporte, Universidad de Chile.
 - **Responsable del estudio:** Bernardo.
-- **Plan de implementación:** `PLAN_TRAFICO.md` (fases 0 y T2–T8).
-- **Estado:** fases 0, T2, T3, T4 y T6 terminadas (T5 se dejó para después, por decisión de Bernardo). El 2026-10-13 se corrigieron los problemas vistos en el visor (sección 20). Falta repetir la prueba en el visor. Ver la [sección 16](#16-estado-pendientes-y-limitaciones).
+- **Plan de implementación:** `PLAN_TRAFICO.md` (fases 0 y T2–T6). Desde el 2026-11-12, lo pendiente (la medición de agentes, T7) está en `PLAN_DATOS_Y_SINCRONIZACION.md`, junto con la sincronización. La integración con el experimento (antes T8) se replanificará. Desde el 2026-11-13, el experimento de elección de ruta (C2 → C3) está en `PLAN_EXPERIMENTO_RUTAS.md` (fases E0–E7).
+- **Estado:** fases 0, T2, T3, T4 y T6 terminadas (T5 se dejó para después, por decisión de Bernardo). El 2026-10-13 se corrigieron los problemas vistos en el visor (sección 20). Falta repetir la prueba en el visor. El 2026-11-25 se terminó E1: se quitaron dos calles y la red quedó con los nodos C1–C4 ([4.1](#41-topología)). Ver la [sección 16](#16-estado-pendientes-y-limitaciones).
 - **Convención:** este documento se actualiza en cada paso de implementación. Los valores marcados con **[VERIFICAR]** deben confirmarse antes de publicarse.
 
 ---
@@ -81,7 +81,7 @@ El tráfico es una **micro-simulación en una red de carriles** (grafo dirigido 
 
 `TrafficManager` ejecuta **un único paso sincronizado** por `FixedUpdate` (orden de ejecución 20, después de la bicicleta):
 
-0. Avanzar los semáforos (`IntersectionController.Tick`) y el regulador de salida (`RingExitController.Tick`).
+0. Avanzar los semáforos (`IntersectionController.Tick`). Hasta el 2026-11-25 también avanzaba el regulador de salida (`RingExitController`), que se quitó con la calle x = 60 ([6.4](#64-regulación-de-la-salida-quitada)).
 1. Proyectar al ciclista sobre los carriles.
 2. Generar autos (spawners).
 3. Ordenar los autos de cada carril por *S* (ordenamiento por inserción; las listas casi siempre ya están ordenadas, así que es O(n)).
@@ -104,7 +104,7 @@ Separar el cálculo de aceleraciones (fase 1) de la integración (fase 2) es la 
 | `StopLine` | Línea de detención (semáforo, PARE o CEDA EL PASO) y eventos del ciclista en la línea |
 | `IntersectionLaneBuilder` | Generador de los carriles, conectores y conflictos de una intersección |
 | `CyclistNetwork` / `CyclistPath` / `RiderRoute` | Red de caminos del ciclista y seguimiento del ciclista sobre ella |
-| `RingExitController` | Regula la salida de autos para mantener estable la cantidad |
+| `OdNode` | Nodo origen o destino (C1–C4): carril por el que los autos entran o salen de la red |
 | `ExperimentLogger` / `EventBus` | Registro de datos |
 
 ---
@@ -115,13 +115,29 @@ Separar el cálculo de aceleraciones (fase 1) de la integración (fase 2) es la 
 
 ### 4.1 Topología
 
-- **Circuito (anillo):** dos rectas E–O (z ≈ ±50) unidas por dos curvas (x ≈ ±150).
+- **Circuito (anillo):** dos rectas E–O (z ≈ ±50, de x = −121 a 121) unidas por dos curvas que llegan a x ≈ ±177.
   - **Anillo exterior:** circula en sentido antihorario visto desde arriba: hacia el este por la recta sur y hacia el oeste por la recta norte. Carriles `Lane_Main_*`.
   - **Anillo interior:** sentido horario. Carriles `Lane_Main2_*`.
 - **Calles transversales de sentido único:**
-  - x = 4: hacia el norte (`Lane_North_01..03`). Entrada a la red desde el sur.
-  - x = −60: hacia el sur (`Lane_South_01..03`). Entrada a la red desde el norte.
-  - x = 60, al sur del circuito: hacia el sur (`Lane_Extra`). **Calle de salida regulada** ([6.4](#64-regulación-de-la-salida-ringexitcontroller)).
+  - x = 4: hacia el norte. Desde el 2026-11-25 (E1) **no cruza el circuito**: llega al anillo desde el sur (`Lane_North_01`) y sale del anillo hacia el norte (`Lane_North_03`).
+  - x = −60: hacia el sur (`Lane_South_01..03`). Entrada a la red desde el norte y salida hacia el sur.
+  - ~~x = 60, al sur del circuito: calle de salida regulada (`Lane_Extra`)~~. **Quitada en E1.**
+
+**Nodos origen–destino (`OdNode`, objeto `Nodos_OD`, desde E1).** Son los únicos puntos por donde los autos entran o salen de la red:
+
+| Nodo | Dónde | Tipo | Carril |
+|---|---|---|---|
+| C1 | Extremo sur de x = −60 | Salida | `Lane_South_03` |
+| C2 | Extremo sur de x = 4 | Entrada | `Lane_North_01` |
+| C3 | Extremo norte de x = 4 | Salida | `Lane_North_03` |
+| C4 | Extremo norte de x = −60 | Entrada | `Lane_South_01` |
+
+**Cambios al mapa (E1, `SimBici > Remove Streets`, `StreetRemoverEditor.cs`).** Para el experimento de elección de ruta (C2 → C3 tiene dos caminos de largo parecido, por la curva este o por la oeste):
+
+- **Calle x = 60:** se quitaron la calzada, sus 2 esquinas de asfalto, sus 4 veredas, 6 árboles, 3 faroles y 28 marcas transversales que cruzaban el anillo. Queda el pasto del terreno. La solera exterior de la recta sur se cerró con un tramo de vereda nuevo de 17.5 m.
+- **Tramo de x = 4 dentro del circuito:** la calzada se recortó en el eje de las rectas del anillo (z = ±49.76), como la antigua T de x = 60. Su malla era la misma de la calle x = −60, así que se guardó una copia recortada (`Assets/AssetsLab/Generated/E1_Calle_RicardoLyon.asset`). Se quitaron las 4 esquinas interiores. Se conservaron las dos veredas laterales, con pasto entre ellas (un paseo entre los edificios). Las soleras interiores de las dos rectas se cerraron con tramos de vereda de 18 m, 1 cm más altos que los vecinos (como las esquinas originales) para que no parpadeen donde se superponen.
+- **Red:** se borraron `Lane_Extra`, `Cruce_SE` (con `RingExitController`) y `Lane_North_02`. Los carriles del anillo que pasaban por `Cruce_SE` se unieron directo (`Lane_Main_01` → `Lane_Main_02` y `Lane_Main2_02` → `Lane_Main2_04`). I_SC e I_NC quedaron en T, y se apagó el PARE del acceso sur de I_NC.
+- **Nada de la geometría se borró:** quedó apagado con el sufijo ` (E1 off)` (53 objetos). Respaldo: `test_backup_2026-11-25_preE1.unity`.
 
 ### 4.2 Intersecciones
 
@@ -129,9 +145,9 @@ Separar el cálculo de aceleraciones (fase 1) de la integración (fase 2) es la 
 |---|---|---|---|
 | `Interseccion_NO` (I_NO) | (−60, 50) | Semáforo | N, E, O (el brazo S es solo de salida) |
 | `Interseccion_SO` (I_SO) | (−60, −50) | Semáforo | N, E, O |
-| `Cruce_S_Centro` (I_SC) | (4, −50) | Prioridad del circuito; **PARE** en el acceso S | O, E, S |
-| `Cruce_N_Centro` (I_NC) | (4, 50) | Prioridad del circuito; **PARE** en el acceso S | O, E, S |
-| `Cruce_SE` (I_SE) | (60, −50) | Prioridad (en T; el brazo S es solo de salida) | O, E |
+| `Cruce_S_Centro` (I_SC) | (4, −50) | En T desde E1. Prioridad del circuito; **PARE** en el acceso S (C2) | O, E, S |
+| `Cruce_N_Centro` (I_NC) | (4, 50) | En T desde E1. Prioridad del circuito (el brazo N, C3, es solo de salida) | O, E |
+| ~~`Cruce_SE` (I_SE)~~ | (60, −50) | Quitada en E1 | — |
 
 *Acceso* = brazo por el que **llegan** los autos (Norte = vienen desde el norte).
 
@@ -206,7 +222,7 @@ Se hizo a partir de las fotos de referencia de `Documentacion/A2_referencias/ref
 | Recta sur del anillo | AV. PROVIDENCIA |
 | x = −60 | PEDRO DE VALDIVIA |
 | x = 4 | RICARDO LYON |
-| x = 60 | LOS LEONES |
+| x = 60 | LOS LEONES (calle quitada en E1; sus placas ya no se colocan) |
 
 **Fuera de alcance, por decisión de Bernardo:** quioscos, cables aéreos y cambio del modelo de los árboles.
 
@@ -425,7 +441,9 @@ El nivel de toda la escena se controla con un solo parámetro, `Flow Multiplier`
 
 **Precalentamiento:** antes de empezar se simulan 120 s de tráfico sin ciclista, para que la red no arranque vacía. Al terminar se eliminan los autos a menos de 20 m del ciclista. Ese tiempo es simulado, no real.
 
-### 6.4 Regulación de la salida (`RingExitController`)
+### 6.4 Regulación de la salida (quitada)
+
+**Quitada el 2026-11-25 (E1), junto con la calle x = 60.** Desde entonces los autos salen solo por C1 y C3 según los pesos de giro, y la cantidad la limita el tope de los spawners. La fase E2 reemplaza este esquema por la demanda de la matriz origen–destino. Se conserva la descripción de cómo funcionaba:
 
 Para que la cantidad sea estable y el tráfico se renueve, una calle de salida (`Lane_Extra`, en I_SE) regula qué proporción *p* de los autos del anillo sale de la red. Se recalcula cada 1 s:
 
@@ -441,9 +459,9 @@ En los accesos del anillo a I_SE, el conector que sale recibe peso 100·*p*. Los
 
 | Accesos | Recto / derecha / izquierda | Objetivo |
 |---|---|---|
-| Calles que llegan desde afuera (I_SC S, I_NC S, I_NO N, I_SO N) | 20 / 40 / 40 | Propensos a entrar al anillo |
+| Calles que llegan desde afuera (I_SC S, I_NO N, I_SO N; I_NC S hasta E1) | 20 / 40 / 40 | Propensos a entrar al anillo |
 | Accesos del anillo en I_SC, I_NC, I_NO, I_SO | 90 / 5 / 5 | Los autos siguen circulando |
-| Accesos del anillo en I_SE | Regulados por *p* | Salida |
+| ~~Accesos del anillo en I_SE~~ | Regulados por *p* (hasta E1) | Salida |
 | Por defecto en el builder | 70 / 20 / 10 | Valor del plan, confirmado por Bernardo |
 
 ---
@@ -772,6 +790,8 @@ Se deriva de la red de tráfico. Cada carril que no es conector da un tramo de b
 - **Sentido interior del anillo:** queda junto a la solera de la berma, a 3.45 m del eje del carril.
 - **Ciclovía exterior:** sin cambios (3.0 m del eje, 1.2 m de la solera).
 
+**Desde el 2026-11-25 (E1), sin las calles x = 60 y x = 4 interior:** 37 tramos (13 por ciclovía, 24 junto a la solera), 22 giros y cruces, 6 líneas de detención y 16 cruces bici–giro de autos. Mayor desajuste: 0.06 m. En la berma interior el camino esquiva 20 autos estacionados.
+
 ### 12.2 Seguimiento del ciclista (`RiderRoute`)
 
 El ciclista elige su camino; `RiderRoute` identifica en qué tramo va.
@@ -821,7 +841,7 @@ Los autos nunca se desplazaban lateralmente.
   | Berma interior del anillo (desde A2) | ~2.25 m por geometría [VERIFICAR con `OvertakeMonitor`] |
   | Calle x = 4 | ~2.0 m |
   | Calle x = −60 | ~2.3 m |
-  | Calle x = 60 | ~2.5 m |
+  | Calle x = 60 (quitada en E1) | ~2.5 m |
 
 - **Bici dentro del carril:** el auto la seguía y no la adelantaba nunca.
 
@@ -1240,7 +1260,7 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | Evento | Detalle |
 |---|---|
 | `traffic_start` | seed, flow_multiplier, target_vehicles, lanes, spawners, intersections, vehicles_after_warmup |
-| `traffic_level` (cada 30 s) | vehicles, target, exit_share, flow_multiplier |
+| `traffic_level` (cada 30 s, hasta el 2026-11-25) | vehicles, target, exit_share, flow_multiplier. Lo publicaba `RingExitController`, que se quitó en E1 |
 | `signal_phase` | approach, phase, time_to_change_s, cycle_s, t_signal_s, reason (start/change) |
 | `traffic_deadlock` | lane, next, waited_s, reason, waiting_vehicles, resolution |
 | `cyclist_wait_start` / `_end` | intersection, approach, phase, time_in_phase_s, time_to_change_s, speed_mps, dist_to_line_m, stopped_before, wait_s |
@@ -1284,13 +1304,17 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 - **Semáforo peatonal simple.** Usa lentes de color, sin el pictograma del peatón.
 - **Pasada cercana a la vista.** El peatón aparece unos 10 s antes del encuentro (~13 m más allá del punto del evento) y podría verse aparecer si la vista está despejada.
 - **Rendimiento con peatones.** Con 60 autos y 47 peatones, el Editor marca 12.1 ms por frame (6.0 ms del hilo principal), sobre el objetivo de 11.1 ms. Hay que medirlo en el visor.
-- **Herramientas que dependen de otras.** `RingExitController` encuentra sus carriles por nombre. Orden al cambiar la geometría:
-  1. `Align Lanes To Curb`, que incluye `Smooth Lanes`.
-  2. `Fit Intersections To Curbs`, o `Generate Intersection Lanes`.
-  3. `Generate Cyclist Network`.
-  4. `Analyze Lane Room`.
-  5. `Build Ring Bike Lane`, que regenera la red del ciclista, y `Decorate City`, que termina con `Build Pedestrian Setup`.
-  6. `Build Pedestrian Setup`, que rehace los pasos y el NavMesh y conserva la densidad elegida.
+- **Herramientas que dependen de otras.** Orden al cambiar la geometría (actualizado en E1):
+  1. `Build Pedestrian Setup`, si cambiaron las veredas: `Fit Intersections To Curbs` mide las soleras en el NavMesh de peatones, y con uno viejo mide las esquinas que ya no están.
+  2. `Align Lanes To Curb`, que incluye `Smooth Lanes`.
+  3. `Fit Intersections To Curbs`, o `Generate Intersection Lanes`.
+  4. `Generate Cyclist Network`.
+  5. `Analyze Lane Room`.
+  6. `Build Ring Bike Lane`, que regenera la red del ciclista, y `Decorate City`, que termina con `Build Pedestrian Setup`.
+  7. `Place Parked Cars`, que también regenera la red del ciclista.
+  8. `Validate Network` (`NetworkValidator.cs`): nombres únicos, conexiones válidas, carriles sin entrada o sin salida fuera de los nodos y rutas por par origen–destino. No cambia nada.
+- **Las herramientas solo miden el suelo (desde el 2026-11-25).** Las que buscan la solera con rayos verticales (`Align Lanes To Curb`, `Generate Cyclist Network`, `Analyze Lane Room`, `Build Ring Bike Lane`, `Decorate City`, `Build Pedestrian Setup`, `Place Parked Cars`) tomaban el primer collider que tocaba el rayo. Desde que existen los autos estacionados (2026-11-09), un auto estacionado se leía como la solera: en E1, `Align Lanes To Curb` corrió 2–2.3 m los tres carriles interiores con autos estacionados a su derecha. Se detectó y se corrigió antes de seguir: ahora todos los rayos usan solo la capa `Ground`. Las herramientas no se habían corrido entre el 2026-11-09 y E1, salvo `Place Parked Cars` sobre la red del ciclista.
+- **Capacidad del PARE de C2.** En la prueba de E1 (9 min simulados) hubo un `traffic_deadlock`: un giro a la izquierda desde C2 esperó 20 s una brecha en el anillo y entró por la regla de antibloqueo. La capacidad del PARE se mide en E2 con la matriz origen–destino.
 - **Tiempo del Editor.** Al entrar en Play, el precalentamiento bloquea el hilo principal unos segundos.
 
 ---
@@ -1451,7 +1475,10 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | `scripts/traffic/TrafficManager.cs` | Motor del tráfico |
 | `scripts/traffic/TrafficRules.cs` | Reglas puras de T3 |
 | `scripts/traffic/BikeConflictZone.cs` | Cruces giro–bici |
-| `scripts/traffic/RingExitController.cs` | Regulación de la salida |
+| `scripts/traffic/OdNode.cs` | Nodo origen o destino (C1–C4), desde E1. `RingExitController.cs` (regulación de la salida) se borró en E1 |
+| `scripts/Editor/StreetRemoverEditor.cs` | `SimBici > Remove Streets`: quita las calles x = 60 y x = 4 interior y deja la red en T (E1) |
+| `scripts/Editor/NetworkValidator.cs` | `SimBici > Validate Network`: revisa la red y lista las rutas por par origen–destino |
+| `AssetsLab/Generated/E1_Calle_RicardoLyon.asset` | Calzada de x = 4 recortada en el anillo |
 | `scripts/traffic/OvertakeRules.cs` | Reglas puras de T4 (lognormal, quíntico, distancias, TTC) |
 | `scripts/experiment/OvertakeMonitor.cs` | Medición de cada pasada (`overtake_pass`) |
 | `scripts/Editor/LaneRoomAnalyzer.cs` | Espacio lateral: solera izquierda y carril contrario |
@@ -1666,6 +1693,15 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 - **Árboles:** cuadrado de tierra de 1 m en vez del tronco encalado y el alcorque.
 - **Colisión:** mobiliario nuevo (61 piezas) y postes de semáforo en la capa `StaticObstacle` ([4.4](#44-ambientación-de-santiago-a2)).
 - **Peatones:** puntos uniformes sobre la vereda y filtro de destinos que cruzan ([14.4](#144-peatones-ambientales-pedestrianmanager)).
+
+### 2026-11-25: cambios al mapa para el experimento de rutas (E1)
+
+- **Mapa:** se quitaron la calle x = 60 y el tramo de x = 4 dentro del circuito; I_SC e I_NC quedaron en T; nodos C1–C4 ([4.1](#41-topología)).
+- **Regulación de la salida:** se borró `RingExitController` ([6.4](#64-regulación-de-la-salida-quitada)).
+- **Herramientas:** las que miden la solera ahora solo ven la capa `Ground`; antes leían a los autos estacionados como solera ([16](#16-estado-pendientes-y-limitaciones)). `Build Pedestrian Setup` ya no cuenta las veredas apagadas.
+- **Regenerado:** carriles, intersecciones, red del ciclista, espacio lateral, ciclovía del anillo, decoración (44 veredas, 72 árboles, 16 placas en 8 postes, 57 colisiones), peatones (NavMesh de 779 triángulos, 178 peatones con 8 por 100 m) y autos estacionados (20 en 8 grupos).
+- **Rutas a flujo libre** (`Validate Network`): C2 → C3 por la curva este 542 m / 44.1 s, por la oeste 552 m / 47.0 s; C4 → C1 directo 256 m / 18.4 s, por la curva oeste 423 m / 37.7 s; C2 → C1 y C4 → C3, 215 m / 22–23 s (la alternativa tarda 2.5 veces más).
+- **Validación** (9 min simulados con el ruteo por pesos, ×3): 0 autos superpuestos (separación mínima 1.25 m), 30 autos (el tope) y nunca más de 2 buses; un `traffic_deadlock` en el PARE de C2.
 
 ## 21. Referencias
 

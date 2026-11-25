@@ -146,7 +146,7 @@ public class TrafficLane : MonoBehaviour
         lateralM = Vector3.Dot(delta, right);
     }
 
-    /// <summary>Cambia en runtime el peso de una conexion (lo usa RingExitController). False si no existe.</summary>
+    /// <summary>Cambia en runtime el peso de una conexion. False si no existe.</summary>
     public bool SetWeight(TrafficLane target, float weight)
     {
         foreach (var c in nextLanes)

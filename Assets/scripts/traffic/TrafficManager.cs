@@ -32,7 +32,7 @@ public class TrafficManager : MonoBehaviour
     [Tooltip("Maximo de buses circulando a la vez. Si un spawner sortea un bus y ya estan todos, sortea otro vehiculo.")]
     [SerializeField, Min(0)] private int maxBuses = 2;
     [Tooltip("Autos objetivo en la red con Flow Multiplier = 1. Objetivo = esto x Flow Multiplier. " +
-             "Los spawners no generan por encima del objetivo y RingExitController regula las salidas.")]
+             "Los spawners no generan por encima del objetivo.")]
     [SerializeField, Min(0)] private int vehiclesPerLevel = 30;
     [Tooltip("Durante el precalentamiento los spawners generan este multiplo de su flujo, para llenar la red antes de empezar.")]
     [SerializeField, Min(1f)] private float warmUpFlowBoost = 3f;
@@ -161,7 +161,6 @@ public class TrafficManager : MonoBehaviour
 
     private readonly List<TrafficVehicle> longWaiters = new List<TrafficVehicle>();
     private readonly Dictionary<TrafficLane, List<float>> pedOnLane = new Dictionary<TrafficLane, List<float>>();
-    private readonly List<RingExitController> exitControllers = new List<RingExitController>();
     private RiderRoute riderRoute;
 
     private System.Random routingRng;
@@ -207,10 +206,6 @@ public class TrafficManager : MonoBehaviour
         }
         foreach (var lane in lanes)
             if (lane.TryGetComponent(out StopLine sl) && !sl.IsCyclistApproach && sl.IsSignalized) stopLines.Add(sl);
-
-        exitControllers.AddRange(FindObjectsByType<RingExitController>(FindObjectsSortMode.None));
-        exitControllers.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
-        foreach (var ec in exitControllers) ec.Resolve();
 
         // Conectores: de que carril de llegada salen (para el calculo de llegadas en conflicto)
         foreach (var lane in lanes)
@@ -319,7 +314,6 @@ public class TrafficManager : MonoBehaviour
     {
         simTimeS += dt;
         foreach (var ic in intersections) ic.Tick(dt);
-        foreach (var ec in exitControllers) ec.Tick(dt, this);
 
         UpdateBikeProjection();
         UpdatePedestrianProjection();

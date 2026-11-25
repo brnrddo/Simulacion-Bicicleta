@@ -311,7 +311,7 @@ public class CyclistNetworkEditor : Editor
 
     private static bool OnRoad(Vector3 p)
     {
-        return Physics.Raycast(p + Vector3.up * 5f, Vector3.down, out RaycastHit hit, 10f) &&
+        return Physics.Raycast(p + Vector3.up * 5f, Vector3.down, out RaycastHit hit, 10f, 1 << LayerMask.NameToLayer("Ground")) &&
                hit.collider.gameObject.layer == LayerMask.NameToLayer("Ground") &&
                !(hit.collider is TerrainCollider);
     }

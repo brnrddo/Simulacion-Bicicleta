@@ -428,7 +428,7 @@ public static class CityDecorator
     }
 
     private static bool OnRoad(Vector3 p) =>
-        Physics.Raycast(p + Vector3.up * 5f, Vector3.down, out RaycastHit hit, 10f) &&
+        Physics.Raycast(p + Vector3.up * 5f, Vector3.down, out RaycastHit hit, 10f, 1 << LayerMask.NameToLayer("Ground")) &&
         hit.collider.gameObject.layer == LayerMask.NameToLayer("Ground") && !(hit.collider is TerrainCollider);
 
     /// <summary>

@@ -60,7 +60,7 @@ public static class PedestrianSetupEditor
         foreach (Transform t in sidewalks.transform)
         {
             var r = t.GetComponent<Renderer>();
-            if (r == null) continue;
+            if (r == null || !t.gameObject.activeInHierarchy) continue;  // veredas quitadas (p. ej. " (E1 off)")
             var mod = t.GetComponent<NavMeshModifier>() ?? t.gameObject.AddComponent<NavMeshModifier>();
             mod.overrideArea = true; mod.area = AreaVereda;
             string key = $"{Mathf.Round(r.bounds.center.x)}_{Mathf.Round(r.bounds.center.z)}_{Mathf.Round(r.bounds.size.x)}_{Mathf.Round(r.bounds.size.z)}";
@@ -248,7 +248,7 @@ public static class PedestrianSetupEditor
     }
 
     private static bool OnRoad(Vector3 p) =>
-        Physics.Raycast(p + Vector3.up * 5f, Vector3.down, out RaycastHit hit, 10f) &&
+        Physics.Raycast(p + Vector3.up * 5f, Vector3.down, out RaycastHit hit, 10f, 1 << LayerMask.NameToLayer("Ground")) &&
         hit.collider.gameObject.layer == LayerMask.NameToLayer("Ground") && !(hit.collider is TerrainCollider);
 
     // ------------------------------------------------------------
