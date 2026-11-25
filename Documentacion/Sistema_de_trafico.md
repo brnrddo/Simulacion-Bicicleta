@@ -428,8 +428,10 @@ No hay spawners en el anillo: el ciclista veía aparecer autos de la nada. Los a
 
 | Spawner | Nodo | Carril | Acceso a la red |
 |---|---|---|---|
-| `Spawner_01` | C2 | `Lane_North_01` (x = 4, desde z = −128) | PARE en I_SC |
-| `Spawner_02` | C4 | `Lane_South_01` (x = −60, desde z = 128) | Semáforo en I_NO |
+| `Spawner_01` | C2 | `Lane_North_01` (x = 4, desde z = −248; hasta el 2026-11-25, −128) | PARE en I_SC |
+| `Spawner_02` | C4 | `Lane_South_01` (x = −60, desde z = 248; hasta el 2026-11-25, 128) | Semáforo en I_NO |
+
+**Entradas alargadas (2026-11-25, `SimBici > Extend Entries`, `EntryExtenderEditor.cs`).** Las dos calles de entrada siguen 120 m más allá del borde del mapa, sobre el pasto (asfalto nuevo, sin veredas), para que la cola quepa en la calle. La reaparición tras un choque (`respawnDistanceM` = 120) quedó en el mismo lugar. **No aumentan la capacidad** de las entradas (ver [16](#16-estado-pendientes-y-limitaciones)): solo cambian una cola "fuera de la red" por una cola visible.
 
 ### 6.3 Matriz origen–destino (desde el 2026-11-25, E2)
 
@@ -1379,9 +1381,13 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
   8. `Validate Network` (`NetworkValidator.cs`): nombres únicos, conexiones válidas, carriles sin entrada o sin salida fuera de los nodos y rutas por par origen–destino. No cambia nada.
 - **Las herramientas solo miden el suelo (desde el 2026-11-25).** Las que buscan la solera con rayos verticales (`Align Lanes To Curb`, `Generate Cyclist Network`, `Analyze Lane Room`, `Build Ring Bike Lane`, `Decorate City`, `Build Pedestrian Setup`, `Place Parked Cars`) tomaban el primer collider que tocaba el rayo. Desde que existen los autos estacionados (2026-11-09), un auto estacionado se leía como la solera: en E1, `Align Lanes To Curb` corrió 2–2.3 m los tres carriles interiores con autos estacionados a su derecha. Se detectó y se corrigió antes de seguir: ahora todos los rayos usan solo la capa `Ground`. Las herramientas no se habían corrido entre el 2026-11-09 y E1, salvo `Place Parked Cars` sobre la red del ciclista.
 - **Capacidad del PARE de C2.** En la prueba de E1 (9 min simulados) hubo un `traffic_deadlock`: un giro a la izquierda desde C2 esperó 20 s una brecha en el anillo y entró por la regla de antibloqueo. **Medida en E2:** con 460 veh/h saliendo de C2 (casi todos doblando a la derecha), 0 llegadas descartadas, cola virtual vacía y como máximo 7 autos en el acceso. Alcanza.
-- **Capacidad del acceso C4 (semáforo de I_NO a 60 m).** En E2, con 550 veh/h sorteados, entraron ~500–530 veh/h y la cola virtual osciló entre 0 y 14 autos: el acceso está cerca de su capacidad (verde de 25 s en un ciclo de 60 s). Una repetición que sortee más de ~550 veh/h en C4 deja autos esperando fuera de la red. **[DECISIÓN pendiente]** alargar la calle de entrada o cambiar el reparto del semáforo.
+- **Capacidad de las entradas (medida el 2026-11-25).** Con 700 veh/h pedidos en C2 y 650 en C4, y las entradas ya alargadas, entraron ~650 y ~490 veh/h. El límite no es el espacio sino la dinámica de los autos:
+  - **C4 (semáforo de I_NO):** los autos salen de la cola cada 3.0–3.6 s (unos 9 por verde de 25 s). Un semáforo real da ~2 s (12–13 por verde, ~750 veh/h). Es el arranque del IDM con *a* = 1.5 m/s² y sin modelo de arranque en cola.
+  - **C2 (PARE):** cada auto sale 5.8 s después del anterior (~620 veh/h): avanza, se detiene por completo (*v* < 0.3 m/s a menos de 3 m de la línea) y recién ahí evalúa la brecha. El HCM usa un tiempo de seguimiento de ~3.3 s en un PARE.
+  - **Hasta antes de esta medición** se atribuía el límite de C4 al largo de la calle de entrada; alargarla no lo cambió.
+  - **[DECISIÓN pendiente]** calibrar la salida de cola (aceleración del IDM o un tiempo de arranque) y la detención en el PARE contra valores publicados, o cambiar el control (más verde norte–sur en I_NO, CEDA en C2).
 - **Giro a la izquierda hacia C3 (de oeste a norte en I_NC).** Cede a los autos que doblan a la derecha desde el este (la ruta este de C2 → C3, ~470 veh/h). Con 150 veh/h doblando a la izquierda hubo 10 `traffic_deadlock` en 19 min. La causa es la aceptación de brecha: el tiempo de llegada se calcula con la velocidad actual del otro auto, sin contar que frena a 13 km/h para doblar, y cada auto que dobla ocupa la zona ~2.7 s; con una brecha crítica de 4.5–5.5 s, el que dobla a la izquierda necesita separaciones de más de ~8 s, que se dan 1 de cada 3 veces. La capacidad teórica (HCM) de ese giro sería ~950 veh/h. **Corregido en E3** con el tiempo de llegada con frenado anticipado ([11.5](#115-aceptación-de-brecha)): 0 bloqueos con la misma matriz.
-- **Capacidad del PARE de C2 (medida en E3).** Con 900 veh/h pedidos de C2 a C3 entraron ~620 veh/h; 30 autos quedaron en la cola virtual y se descartaron 37 llegadas en 13 min. La matriz por defecto (500 ± 50) está debajo, pero un sorteo alto se acerca. **[DECISIÓN pendiente]** junto con la del acceso C4.
+- **Capacidad del PARE de C2 (medida en E3).** Con 900 veh/h pedidos de C2 a C3 entraron ~620 veh/h; 30 autos quedaron en la cola virtual y se descartaron 37 llegadas en 13 min. Ver el punto anterior.
 - **El reparto de rutas casi no depende de la congestión.** Con estos flujos el anillo está lejos de su capacidad (1 800 veh/h por carril) y el cuello de botella real, el PARE de C2, es común a las dos rutas de C2 → C3. El reparto (93/7) lo fijan los semáforos y los giros de la ruta oeste y β. Con 900 veh/h de C2 a C3 el reparto no se movió. **[DECISIÓN pendiente]** si el experimento necesita más autos por la curva oeste.
 - **Tiempo del Editor.** Al entrar en Play, el precalentamiento bloquea el hilo principal unos segundos.
 
@@ -1554,6 +1560,8 @@ Desde el 2026-11-13 hay además tests de la bici (filtro 1€ y paquetes del Ard
 | `scripts/traffic/RouteChoiceModel.cs` | Matemática pura de la elección: BPR, logit, capacidad HCM, demora de semáforo, enumeración y selección de rutas (E3) |
 | `AssetsLab/Config/od_matriz_base.json` | Matriz origen–destino por defecto |
 | `scripts/Editor/StreetRemoverEditor.cs` | `SimBici > Remove Streets`: quita las calles x = 60 y x = 4 interior y deja la red en T (E1) |
+| `scripts/Editor/EntryExtenderEditor.cs` | `SimBici > Extend Entries`: alarga 120 m las calles de entrada C2 y C4 |
+| `AssetsLab/Generated/E3_Calzada_C2.asset`, `E3_Calzada_C4.asset` | Calzada de las entradas alargadas |
 | `scripts/Editor/NetworkValidator.cs` | `SimBici > Validate Network`: revisa la red y lista las rutas por par origen–destino |
 | `AssetsLab/Generated/E1_Calle_RicardoLyon.asset` | Calzada de x = 4 recortada en el anillo |
 | `scripts/traffic/OvertakeRules.cs` | Reglas puras de T4 (lognormal, quíntico, distancias, TTC) |
@@ -1792,6 +1800,11 @@ Desde el 2026-11-13 hay además tests de la bici (filtro 1€ y paquetes del Ard
 - **Aceptación de brecha:** el tiempo de llegada del otro auto cuenta que frena para entrar a su conector ([11.5](#115-aceptación-de-brecha)). Resuelve los bloqueos del giro a la izquierda hacia C3.
 - **Elección de ruta:** catálogo de rutas por par, tiempo por tramo con BPR y demora por control, logit con β = −0.1 ([7](#7-ruteo)). Se borró `RoutePlanner`.
 - **Validación** (31 min simulados, matriz por defecto): reparto observado igual al del modelo (C2 → C3 92.8 % este, C4 → C1 87.3 % directo), sin oscilaciones, 0 superpuestos, 0 `traffic_deadlock`. Con 900 veh/h de C2 a C3 el PARE de C2 deja pasar ~620 veh/h y el reparto no cambia. En la corrida base, el acceso C4 acumuló hasta 27 autos en la cola virtual y descartó 3 llegadas (en E2, 14 y 0). Causa probable, sin verificar: el 13 % que ahora va por la curva oeste dobla a la derecha en I_NO y cede a los peatones del paso, lo que frena el único carril del acceso.
+
+### 2026-11-25: entradas alargadas y capacidad medida
+
+- **Entradas C2 y C4 alargadas 120 m** fuera del mapa ([6.2](#62-entradas)). La reaparición tras un choque queda en el mismo lugar.
+- **Capacidad medida** con 700 y 650 veh/h pedidos: C2 ~650 veh/h (5.8 s entre salidas del PARE), C4 ~490 veh/h (3.0–3.6 s entre salidas en verde). Alargar no aumentó la capacidad: el límite es la dinámica de arranque y la detención en el PARE ([16](#16-estado-pendientes-y-limitaciones)). Un `traffic_deadlock` en 23 min con esa demanda alta.
 
 ## 21. Referencias
 
