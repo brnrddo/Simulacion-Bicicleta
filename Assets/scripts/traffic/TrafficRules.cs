@@ -72,6 +72,31 @@ public static class TrafficRules
     }
 
     /// <summary>
+    /// Tiempo de llegada a un punto que esta dentro de un tramo mas lento (p. ej. el punto de conflicto dentro de un
+    /// conector de giro): el auto sigue a su velocidad, frena con 'decel' hasta 'vSlow' justo al entrar al tramo lento
+    /// (a 'distToSlowM') y recorre el resto a 'vSlow'. Si ya no alcanza a frenar comodo, se supone que llega al tramo
+    /// lento a 'vSlow' con desaceleracion constante. Nunca es menor que TimeToReach con la velocidad actual.
+    /// Hasta E3 (2026-11-25) se usaba la velocidad actual: un auto que se acercaba a 10 m/s a un giro de 13 km/h
+    /// parecia llegar en 2.4 s cuando llegaba en ~4 s, y el que debia cederle esperaba de mas.
+    /// </summary>
+    public static float AnticipatedTimeToReach(float distanceM, float distToSlowM, float speedMps, float vSlowMps,
+                                               float decelMps2, float stoppedNearM = 3f)
+    {
+        if (distanceM <= 0f) return 0f;
+        if (speedMps < 0.5f) return TimeToReach(distanceM, speedMps, stoppedNearM);
+        vSlowMps = Mathf.Max(vSlowMps, 0.5f);
+        if (speedMps <= vSlowMps) return distanceM / speedMps;
+
+        float dc = Mathf.Clamp(distToSlowM, 0f, distanceM);
+        float tSlowPart = (distanceM - dc) / vSlowMps;
+        float brakeM = (speedMps * speedMps - vSlowMps * vSlowMps) / (2f * Mathf.Max(decelMps2, 0.1f));
+        float tToSlow = dc >= brakeM
+            ? (dc - brakeM) / speedMps + 2f * brakeM / (speedMps + vSlowMps)
+            : 2f * dc / (speedMps + vSlowMps);
+        return tToSlow + tSlowPart;
+    }
+
+    /// <summary>
     /// Prioridad entre dos movimientos que se cruzan (sin separacion por semaforo):
     /// acceso secundario (PARE/CEDA) cede al principal; entre iguales, izquierda cede a todos
     /// y derecha cede a recto. Devuelve true si A debe ceder a B.

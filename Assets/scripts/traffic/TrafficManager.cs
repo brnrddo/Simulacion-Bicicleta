@@ -150,9 +150,7 @@ public class TrafficManager : MonoBehaviour
     private RiderRoute riderRoute;
 
     private OdDemand demand;
-    // Ruta mas rapida por (carril de partida, carril de destino, vehiculo largo). Se comparte entre autos.
-    private readonly Dictionary<(TrafficLane, TrafficLane, bool), List<TrafficLane>> routeCache =
-        new Dictionary<(TrafficLane, TrafficLane, bool), List<TrafficLane>>();
+    private RouteChoice routeChoice;
     private System.Random startUpRng;
     private System.Random colorRng;
     private System.Random overtakeRng;
@@ -180,6 +178,8 @@ public class TrafficManager : MonoBehaviour
 
         demand = GetComponent<OdDemand>();
         if (demand == null) Debug.LogError("[TrafficManager] Falta OdDemand en el objeto del trafico: no se generan autos.");
+        routeChoice = GetComponent<RouteChoice>();
+        if (routeChoice == null) Debug.LogError("[TrafficManager] Falta RouteChoice en el objeto del trafico: los autos no tienen ruta.");
         startUpRng = CreateRng(1000);
         overtakeRng = CreateRng(2000);
         colorRng = CreateRng(4000);   // colores de carroceria: no altera las otras secuencias
@@ -233,6 +233,8 @@ public class TrafficManager : MonoBehaviour
 
     private void Start()
     {
+        // Eleccion de ruta (necesita los carriles, las lineas de detencion y los conectores donde cabe un bus)
+        if (routeChoice != null) routeChoice.Init(this, lanes, c => !c.IsConnector || LongVehicleFits(c));
         // La matriz origen-destino fija el flujo y los destinos de cada spawner (sin matriz valida, flujo 0)
         if (demand != null) demand.ConfigureSpawners(spawners);
         foreach (var sp in spawners)
@@ -243,6 +245,7 @@ public class TrafficManager : MonoBehaviour
 
         if (warmUpSeconds > 0f) WarmUp();
         if (demand != null) demand.ResetCounters(simTimeS);
+        if (routeChoice != null) routeChoice.ResetCounters();
 
         EventBus.Publish("traffic_start", "traffic", string.Format(CultureInfo.InvariantCulture,
             "seed={0};od_source={1};od_total_vph={2:F1};lanes={3};spawners={4};intersections={5};vehicles_after_warmup={6};warmup_s={7:F0}",
@@ -309,6 +312,7 @@ public class TrafficManager : MonoBehaviour
         simTimeS += dt;
         foreach (var ic in intersections) ic.Tick(dt);
         if (!IsWarmingUp && demand != null) demand.Tick(dt, simTimeS);
+        if (!IsWarmingUp && routeChoice != null) routeChoice.Tick(dt, simTimeS);
 
         UpdateBikeProjection();
         UpdatePedestrianProjection();
@@ -370,6 +374,7 @@ public class TrafficManager : MonoBehaviour
                 v.S = overflow;
                 v.NextLane = v.NextNextLane;
                 v.NextNextLane = v.RouteAt(v.RouteIndex + 2);
+                if (routeChoice != null) routeChoice.OnLaneEntered(v.Lane, simTimeS);
                 v.Lane.Vehicles.Insert(0, v);  // recien entrado: es el de S mas bajo
 
                 if (v.Lane.IsConnector)
@@ -618,21 +623,9 @@ public class TrafficManager : MonoBehaviour
 
     private bool IsLong(TrafficVehicle prefab) => prefab.LengthM > LongVehicleMinLengthM && longVehicleChecked;
 
-    /// <summary>
-    /// Ruta mas rapida a flujo libre (largo / limite) de 'from' a 'to'; un vehiculo largo solo por los conectores
-    /// donde cabe. null si no hay. Las rutas se guardan y se comparten entre autos: no modificarlas.
-    /// </summary>
-    public List<TrafficLane> GetRoute(TrafficLane from, TrafficLane to, bool longVehicle)
-    {
-        var key = (from, to, longVehicle);
-        if (routeCache.TryGetValue(key, out var route)) return route;
-        route = RoutePlanner.Shortest(from, to, l => l.LengthM / Mathf.Max(l.SpeedLimitMps, 0.1f),
-                                      longVehicle ? (System.Predicate<TrafficLane>)(c => !c.IsConnector || longVehicleConnectors.Contains(c)) : null);
-        routeCache[key] = route;
-        return route;
-    }
-
-    public bool HasRoute(TrafficLane from, TrafficLane to, TrafficVehicle prefab) => GetRoute(from, to, IsLong(prefab)) != null;
+    /// <summary>Hay alguna ruta de 'from' a 'to' para este vehiculo (un bus solo por los conectores donde cabe).</summary>
+    public bool HasRoute(TrafficLane from, TrafficLane to, TrafficVehicle prefab) =>
+        routeChoice != null && routeChoice.HasRoute(from, to, IsLong(prefab));
 
     /// <summary>
     /// Conectores donde cabe un vehiculo largo sin pisar la vereda: en cada punto, la distancia del eje a la vereda
@@ -787,7 +780,11 @@ public class TrafficManager : MonoBehaviour
                     if (inside) return "conflicto";
                     continue;
                 }
-                if (!TrafficRules.GapAccepted(TrafficRules.TimeToReach(dist, other.Speed), gapNeeded)) return "ceder";
+                // Tiempo de llegada contando que el otro frena para entrar a su conector (giro lento)
+                float vConn = k.other.SpeedLimitMps * Mathf.Max(other.SpeedFactor, 0.1f);
+                float arrival = TrafficRules.AnticipatedTimeToReach(dist, inside ? 0f : dist - k.sOther, other.Speed, vConn,
+                                                                    other.Params.comfortDecelMps2);
+                if (!TrafficRules.GapAccepted(arrival, gapNeeded)) return "ceder";
             }
         }
 
@@ -1073,8 +1070,10 @@ public class TrafficManager : MonoBehaviour
         v.SpeedFactor = speedFactor;
         v.Origin = origin ?? "";
         v.Destination = destination;
-        v.Route = destination != null ? GetRoute(lane, destination.Lane, IsLong(prefab)) : null;
+        v.Route = destination != null && routeChoice != null
+            ? routeChoice.Choose(v, lane, destination, IsLong(prefab), simTimeS, IsWarmingUp) : null;
         v.RouteIndex = 0;
+        if (routeChoice != null) routeChoice.OnLaneEntered(lane, simTimeS);
         if (v.Route == null || v.Route.Count == 0 || v.Route[0] != lane)
             Debug.LogError($"[TrafficManager] {v.Label} sin ruta de {lane.name} a {(destination != null ? destination.NodeId : "?")}: sale al final del carril.");
         v.NextLane = v.RouteAt(1);

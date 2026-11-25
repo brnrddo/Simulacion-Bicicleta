@@ -472,9 +472,51 @@ Desde E2 los autos siguen su ruta al destino y estos pesos no se usan; `Intersec
 
 ## 7. Ruteo
 
-**Desde E2 (2026-11-25), ruta completa al destino.** Cada auto nace con su destino ([6.3](#63-matriz-origendestino-desde-el-2026-11-25-e2)) y una ruta: la lista de carriles desde el de aparición hasta el de salida (`TrafficVehicle.Route`). Por ahora es la **más rápida a flujo libre** (largo / límite de cada carril), calculada con Dijkstra (`RoutePlanner`) y guardada por par de carriles. Un vehículo largo (bus) solo usa los conectores donde cabe. **E3 la reemplaza** por la elección logit entre rutas con la curva BPR.
+**Ruta completa al destino.** Cada auto nace con su destino ([6.3](#63-matriz-origendestino-desde-el-2026-11-25-e2)) y una ruta: la lista de carriles desde el de aparición hasta el de salida (`TrafficVehicle.Route`). La ruta no cambia en el camino. Historia:
 
-Hasta E2 el auto elegía el carril siguiente al azar, con probabilidad proporcional a los pesos de `nextLanes` y un generador propio (offset 0).
+- hasta E2, el auto elegía el carril siguiente al azar según los pesos de `nextLanes` (generador con offset 0);
+- en E2, la ruta más rápida a flujo libre (Dijkstra, `RoutePlanner`, ya borrado);
+- **desde E3 (2026-11-25), elección logit con la congestión del momento** (`RouteChoice` en el objeto `Traffic`, matemática en `RouteChoiceModel`).
+
+### 7.1 Rutas posibles
+
+Para cada par (carril de aparición, carril de destino) se enumeran las rutas que no repiten carril ni intersección. Se guardan hasta `maxRoutes` = 2, descartando las que a red vacía tardan más de `maxRouteTimeFactor` = 2.2 veces la mejor. Un bus solo usa los conectores donde cabe. Con la red de E1:
+
+| Par | Rutas (tiempo a red vacía, con demora por control) |
+|---|---|
+| C2 → C3 | Este (I_SC derecha, I_NC derecha): 50.4 s · Oeste (I_SC izquierda, I_SO e I_NO recto, I_NC izquierda): 75.9 s |
+| C4 → C1 | Directo (I_NO e I_SO recto): 38.9 s · Por la curva oeste (I_NO derecha, I_SO derecha): 58.1 s |
+| C2 → C1 | Directo: 41.4 s (la vuelta larga, 86.0 s, se descarta) |
+| C4 → C3 | Directo: 34.6 s (la vuelta larga se descarta) |
+
+### 7.2 Tiempo de cada tramo (BPR)
+
+$$
+t_a = (t_{0,a} + d_a)\left[1 + \alpha\left(\frac{v_a}{c_a}\right)^{\gamma}\right],\qquad \alpha = 0.15,\ \gamma = 4
+$$
+
+- *t*0: largo / límite de velocidad.
+- *v*: autos que **entraron** al tramo en los últimos 120 s simulados, en veh/h (se cuenta a la entrada para que una cola no haga parecer vacío el tramo).
+- *d* y *c* según el control. Flujo de saturación *s* = 1 800 veh/h.
+
+  | Tramo | *d* | *c* |
+  |---|---|---|
+  | Llegada a un semáforo | *C*(1 − *g*/*C*)²/2 = 10.2 s (*C* = 60 s, *g* = 25 s) | *s g*/*C* = 750 veh/h |
+  | Llegada a un PARE | 3 s | *s* |
+  | Giro que cede (conector) | 3 600 / *c* | HCM: *q*c e^(−*q*c *t*c/3600) / (1 − e^(−*q*c *t*f/3600)), con *q*c el flujo actual de los movimientos a los que cede, *t*c = 4.5 s (+2 s desde un PARE), *t*f = 2.2 s (3.3 s desde un PARE) |
+  | Resto | 0 | *s* |
+
+  La demora por control hace que el logit "vea" los semáforos y los giros que ceden, y la capacidad HCM hace que el giro a la izquierda de la ruta oeste se encarezca cuando la ruta este se carga.
+
+### 7.3 Elección (logit)
+
+$$
+P(r_i) = \frac{e^{\beta T_i}}{\sum_k e^{\beta T_k}},\qquad T_i = \sum_{a \in r_i} t_a,\qquad \beta = -0.1\ \text{s}^{-1}\ \textbf{[VERIFICAR, calibrar]}
+$$
+
+Se resta el mínimo de *T* antes de la exponencial. Un sorteo por auto, con `CreateRng(seed, 7100)`, al aparecer.
+
+**Resultado con la matriz por defecto** (31 min simulados): C2 → C3 93 % este / 7 % oeste (elegidas 231 / 18; probabilidad del modelo 0.934); C4 → C1 87 % / 13 % (213 / 31; 0.868). El reparto no oscila entre minutos. Los tiempos casi no cambian con la congestión: a estos flujos los tramos del anillo están lejos de su capacidad, y el reparto lo deciden sobre todo los semáforos y los giros (ver [16](#16-estado-pendientes-y-limitaciones)).
 
 **Dos carriles de anticipación:** cada auto conoce su carril actual, el siguiente (`NextLane`) y el subsiguiente (`NextNextLane`), que ahora salen de su ruta. Es necesario porque los carriles de llegada a una intersección miden solo 1–3 m: con un solo paso de anticipación, el auto sabría qué giro hará cuando ya está en la línea, demasiado tarde para frenar.
 
@@ -500,6 +542,7 @@ Hasta E2 el auto elegía el carril siguiente al azar, con probabilidad proporcio
   | 5100 | Autos estacionados (en el Editor, semilla fija 20261109) |
   | 6000 | Audio: fases de inicio de los bucles |
   | 7000 | Sorteo de la matriz origen–destino (E2) |
+  | 7100 | Elección de ruta (logit, E3) |
 
   Agregar un spawner no altera la secuencia de los demás.
 - **Orden estable:** los carriles, spawners, intersecciones y controladores se recorren ordenados por nombre; los autos, en orden de Id.
@@ -678,6 +721,17 @@ t_o = \frac{d_o}{v_o}
 $$
 
 Aquí *d*o es la distancia del frente del otro auto al inicio de la zona, siguiendo su ruta (incluye autos que aún no eligieron conector pero vienen hacia el carril de llegada correspondiente; criterio conservador). Si *v*o < 0.5 m/s, cuenta como detenido: *t*o = ∞, o 0 si ya está encima del punto.
+
+**Desde E3 (2026-11-25), con frenado anticipado** (`TrafficRules.AnticipatedTimeToReach`). El otro auto no llega a su velocidad actual: frena con su desaceleración cómoda *b*o hasta la velocidad del conector, *v*c = límite del conector × su factor de velocidad, justo al entrar a él (a *d*c = *d*o − *s*zona), y recorre el resto a *v*c:
+
+$$
+t_o = \frac{d_c - d_b}{v_o} + \frac{2\,d_b}{v_o + v_c} + \frac{d_o - d_c}{v_c},\qquad d_b = \frac{v_o^2 - v_c^2}{2\,b_o}
+$$
+
+Si ya no alcanza a frenar cómodo (*d*c < *d*b), llega al conector a *v*c con desaceleración constante; si va más lento que *v*c, *t*o = *d*o / *v*o. Nunca es menor que la fórmula anterior.
+
+- **Por qué:** en E2 el giro a la izquierda hacia C3 (de oeste a norte en I_NC) cedía de más a los autos que doblan a la derecha desde el este. Un auto a 10 m/s, 23 m antes de un giro de 13 km/h, parecía llegar en 2.4 s y llegaba en ~4 s. Con 150 veh/h doblando a la izquierda hubo 10 `traffic_deadlock` en 19 min.
+- **Resultado:** con la misma matriz, 0 `traffic_deadlock` en 19 min y espera máxima observada de 9.3 s. No hizo falta el criterio de inserción para convergencias que proponía el plan.
 
 El auto entra si, para todos:
 
@@ -1268,6 +1322,8 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | `od_matrix` (uno por par, al iniciar) | from, to, mean_vph, sd_vph, sampled_vph, source. También en `_meta.txt` (`od_C2_C3=mean=...;sd=...;sampled=...`) |
 | `od_flow` (cada 60 s, uno por par) | from, to, sampled_vph, generated, generated_vph, arrived, origin_pending, origin_dropped, elapsed_s. Cuenta desde el fin del precalentamiento |
 | `od_error` | source: la matriz no se pudo leer o no calza con los nodos; no se genera tráfico |
+| `route_choice` (por auto, si el par tiene más de una ruta) | pair, vehicle_type, chosen, route, times_s (tiempo de cada ruta), probs |
+| `route_share` (cada 60 s, por par con más de una ruta) | pair, routes, time_s, prob, chosen_total, share_total, chosen_last, free_time_s |
 | `traffic_level` (cada 30 s, hasta el 2026-11-25) | vehicles, target, exit_share, flow_multiplier. Lo publicaba `RingExitController`, que se quitó en E1 |
 | `signal_phase` | approach, phase, time_to_change_s, cycle_s, t_signal_s, reason (start/change) |
 | `traffic_deadlock` | lane, next, waited_s, reason, waiting_vehicles, resolution |
@@ -1324,14 +1380,18 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 - **Las herramientas solo miden el suelo (desde el 2026-11-25).** Las que buscan la solera con rayos verticales (`Align Lanes To Curb`, `Generate Cyclist Network`, `Analyze Lane Room`, `Build Ring Bike Lane`, `Decorate City`, `Build Pedestrian Setup`, `Place Parked Cars`) tomaban el primer collider que tocaba el rayo. Desde que existen los autos estacionados (2026-11-09), un auto estacionado se leía como la solera: en E1, `Align Lanes To Curb` corrió 2–2.3 m los tres carriles interiores con autos estacionados a su derecha. Se detectó y se corrigió antes de seguir: ahora todos los rayos usan solo la capa `Ground`. Las herramientas no se habían corrido entre el 2026-11-09 y E1, salvo `Place Parked Cars` sobre la red del ciclista.
 - **Capacidad del PARE de C2.** En la prueba de E1 (9 min simulados) hubo un `traffic_deadlock`: un giro a la izquierda desde C2 esperó 20 s una brecha en el anillo y entró por la regla de antibloqueo. **Medida en E2:** con 460 veh/h saliendo de C2 (casi todos doblando a la derecha), 0 llegadas descartadas, cola virtual vacía y como máximo 7 autos en el acceso. Alcanza.
 - **Capacidad del acceso C4 (semáforo de I_NO a 60 m).** En E2, con 550 veh/h sorteados, entraron ~500–530 veh/h y la cola virtual osciló entre 0 y 14 autos: el acceso está cerca de su capacidad (verde de 25 s en un ciclo de 60 s). Una repetición que sortee más de ~550 veh/h en C4 deja autos esperando fuera de la red. **[DECISIÓN pendiente]** alargar la calle de entrada o cambiar el reparto del semáforo.
-- **Giro a la izquierda hacia C3 (de oeste a norte en I_NC).** Cede a los autos que doblan a la derecha desde el este (la ruta este de C2 → C3, ~470 veh/h). Con 150 veh/h doblando a la izquierda hubo 10 `traffic_deadlock` en 19 min. La causa es la aceptación de brecha: el tiempo de llegada se calcula con la velocidad actual del otro auto, sin contar que frena a 13 km/h para doblar, y cada auto que dobla ocupa la zona ~2.7 s; con una brecha crítica de 4.5–5.5 s, el que dobla a la izquierda necesita separaciones de más de ~8 s, que se dan 1 de cada 3 veces. La capacidad teórica (HCM) de ese giro sería ~950 veh/h. **Se corrige en E3**, porque la ruta oeste de C2 → C3 termina en ese giro. Con la matriz por defecto (10 veh/h) no hubo bloqueos.
+- **Giro a la izquierda hacia C3 (de oeste a norte en I_NC).** Cede a los autos que doblan a la derecha desde el este (la ruta este de C2 → C3, ~470 veh/h). Con 150 veh/h doblando a la izquierda hubo 10 `traffic_deadlock` en 19 min. La causa es la aceptación de brecha: el tiempo de llegada se calcula con la velocidad actual del otro auto, sin contar que frena a 13 km/h para doblar, y cada auto que dobla ocupa la zona ~2.7 s; con una brecha crítica de 4.5–5.5 s, el que dobla a la izquierda necesita separaciones de más de ~8 s, que se dan 1 de cada 3 veces. La capacidad teórica (HCM) de ese giro sería ~950 veh/h. **Corregido en E3** con el tiempo de llegada con frenado anticipado ([11.5](#115-aceptación-de-brecha)): 0 bloqueos con la misma matriz.
+- **Capacidad del PARE de C2 (medida en E3).** Con 900 veh/h pedidos de C2 a C3 entraron ~620 veh/h; 30 autos quedaron en la cola virtual y se descartaron 37 llegadas en 13 min. La matriz por defecto (500 ± 50) está debajo, pero un sorteo alto se acerca. **[DECISIÓN pendiente]** junto con la del acceso C4.
+- **El reparto de rutas casi no depende de la congestión.** Con estos flujos el anillo está lejos de su capacidad (1 800 veh/h por carril) y el cuello de botella real, el PARE de C2, es común a las dos rutas de C2 → C3. El reparto (93/7) lo fijan los semáforos y los giros de la ruta oeste y β. Con 900 veh/h de C2 a C3 el reparto no se movió. **[DECISIÓN pendiente]** si el experimento necesita más autos por la curva oeste.
 - **Tiempo del Editor.** Al entrar en Play, el precalentamiento bloquea el hilo principal unos segundos.
 
 ---
 
 ## 17. Validación
 
-### 17.1 Tests automáticos (EditMode): 93 de 93 pasan (2026-11-25)
+### 17.1 Tests automáticos (EditMode): 100 de 100 pasan (2026-11-25, E3)
+
+Desde E3: tiempo de llegada con frenado anticipado (`TrafficRulesTests`); BPR, logit (fórmula del dibujo, estabilidad), capacidad HCM, demora de semáforo y selección de rutas (`RouteChoiceModelTests`); catálogo de rutas sin repetir intersección y con el filtro del bus (`VehicleMixTests`, en lugar del test de `RoutePlanner`).
 
 Desde el 2026-11-13 hay además tests de la bici (filtro 1€ y paquetes del Arduino, `BikeSignalTests`; respuesta de dirección, `SteeringResponseTests`) y, desde E2, de la matriz origen–destino (`OdMatrixTests`: lectura, validación de pares, media y sd del sorteo con N = 20 000, nunca negativa, misma semilla → misma matriz, reparto de destinos) y de la ruta más rápida (`RoutePlanner`, en `VehicleMixTests`, que reemplaza al test de la elección por pesos). La tabla siguiente es la de T2–T6:
 
@@ -1490,7 +1550,8 @@ Desde el 2026-11-13 hay además tests de la bici (filtro 1€ y paquetes del Ard
 | `scripts/traffic/OdNode.cs` | Nodo origen o destino (C1–C4), desde E1. `RingExitController.cs` (regulación de la salida) se borró en E1 |
 | `scripts/traffic/OdMatrix.cs` | Matriz origen–destino: lectura, validación, sorteo normal por celda y reparto de destinos (E2) |
 | `scripts/traffic/OdDemand.cs` | Carga la matriz, la sortea, configura los spawners y publica `od_matrix` y `od_flow` (E2) |
-| `scripts/traffic/RoutePlanner.cs` | Ruta más rápida entre dos carriles (Dijkstra) (E2) |
+| `scripts/traffic/RouteChoice.cs` | Elección de ruta de cada auto: catálogo, flujo por tramo, BPR, logit, `route_choice` y `route_share` (E3). Reemplaza a `RoutePlanner.cs` (E2, borrado) |
+| `scripts/traffic/RouteChoiceModel.cs` | Matemática pura de la elección: BPR, logit, capacidad HCM, demora de semáforo, enumeración y selección de rutas (E3) |
 | `AssetsLab/Config/od_matriz_base.json` | Matriz origen–destino por defecto |
 | `scripts/Editor/StreetRemoverEditor.cs` | `SimBici > Remove Streets`: quita las calles x = 60 y x = 4 interior y deja la red en T (E1) |
 | `scripts/Editor/NetworkValidator.cs` | `SimBici > Validate Network`: revisa la red y lista las rutas por par origen–destino |
@@ -1725,6 +1786,12 @@ Desde el 2026-11-13 hay además tests de la bici (filtro 1€ y paquetes del Ard
 - **Cola virtual** de los spawners de 5 a 30 llegadas.
 - **Corrección en las convergencias:** `TailInZone` contaba la cola de cualquier auto en el carril de salida, incluso la de uno que venía del mismo conector; ahora solo la de los que salen del conector en conflicto.
 - **Validación** (31 min simulados, semilla 12345, matriz sorteada C2 → C3 449, C2 → C1 11, C4 → C1 541, C4 → C3 9 veh/h): C2 → C3 generó 471 veh/h (+4.9 %); C4 → C1 500 veh/h (−7.6 %) con 14 llegadas en la cola virtual y 0 descartadas; los pares de 10 veh/h tuvieron 3–12 autos. 0 autos superpuestos, 0 `traffic_deadlock`. Hallazgos: el acceso C4 está cerca de su capacidad y el giro a la izquierda hacia C3 cede de más ([16](#16-estado-pendientes-y-limitaciones)).
+
+### 2026-11-25: elección de ruta con logit y BPR (E3)
+
+- **Aceptación de brecha:** el tiempo de llegada del otro auto cuenta que frena para entrar a su conector ([11.5](#115-aceptación-de-brecha)). Resuelve los bloqueos del giro a la izquierda hacia C3.
+- **Elección de ruta:** catálogo de rutas por par, tiempo por tramo con BPR y demora por control, logit con β = −0.1 ([7](#7-ruteo)). Se borró `RoutePlanner`.
+- **Validación** (31 min simulados, matriz por defecto): reparto observado igual al del modelo (C2 → C3 92.8 % este, C4 → C1 87.3 % directo), sin oscilaciones, 0 superpuestos, 0 `traffic_deadlock`. Con 900 veh/h de C2 a C3 el PARE de C2 deja pasar ~620 veh/h y el reparto no cambia. En la corrida base, el acceso C4 acumuló hasta 27 autos en la cola virtual y descartó 3 llegadas (en E2, 14 y 0). Causa probable, sin verificar: el 13 % que ahora va por la curva oeste dobla a la derecha en I_NO y cede a los peatones del paso, lo que frena el único carril del acceso.
 
 ## 21. Referencias
 
