@@ -300,13 +300,15 @@ Cada auto sortea sus parámetros al aparecer, de normales truncadas (recortadas 
 | Parámetro | Media | DE | Rango | Nota |
 |---|---|---|---|---|
 | Factor de velocidad deseada | 1.00 | 0.08 | 0.8–1.2 | *v₀* = límite × factor |
-| *T* (s) | 1.3 | 0.2 | 0.8–2.0 | Punto de partida urbano; calibrar en piloto |
+| *T* (s) | 1.0 | 0.2 | 0.7–1.6 | Tráfico urbano (Treiber y Kesting 2013). Hasta el 2026-11-25: 1.3 (0.8–2.0). Ver la calibración abajo |
 | *s₀* (m) | 2.0 | 0.3 | 1.2–3.0 | Ídem |
 | *a* (m/s²) | 1.5 | 0.2 | 0.9–2.2 | Ídem |
 | *b* (m/s²) | 2.0 | 0.3 | 1.3–3.0 | Ídem |
 | δ | 4 | — | — | Treiber et al. (2000) |
 | Brecha crítica (s) | 4.5 | 0.6 | 3.0–7.0 | [11.5](#115-aceptación-de-brecha) |
 | Brecha extra desde PARE/CEDA (s) | +2.0 | — | — | [11.5](#115-aceptación-de-brecha) |
+
+**Calibración de la salida de cola (2026-11-25).** Con *T* = 1.3 s el IDM descarga una cola detenida cada ~2.25 s (1 600 veh/h); con *T* = 1.0 s y *a* = 1.5 m/s², cada ~1.95 s (~1 850 veh/h), cerca de los 1 900 veh/h por carril de flujo de saturación base del *Highway Capacity Manual* **[VERIFICAR edición]**. Medido en la escena: 1.6–2.3 s entre autos en un verde sin giros que cedan a peatones.
 
 Normal estándar por Box–Muller con `System.Random`: *z* = √(−2 ln *u*₁) · cos(2π*u*₂), con *u*₁ ∈ (0, 1].
 
@@ -1381,12 +1383,13 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
   8. `Validate Network` (`NetworkValidator.cs`): nombres únicos, conexiones válidas, carriles sin entrada o sin salida fuera de los nodos y rutas por par origen–destino. No cambia nada.
 - **Las herramientas solo miden el suelo (desde el 2026-11-25).** Las que buscan la solera con rayos verticales (`Align Lanes To Curb`, `Generate Cyclist Network`, `Analyze Lane Room`, `Build Ring Bike Lane`, `Decorate City`, `Build Pedestrian Setup`, `Place Parked Cars`) tomaban el primer collider que tocaba el rayo. Desde que existen los autos estacionados (2026-11-09), un auto estacionado se leía como la solera: en E1, `Align Lanes To Curb` corrió 2–2.3 m los tres carriles interiores con autos estacionados a su derecha. Se detectó y se corrigió antes de seguir: ahora todos los rayos usan solo la capa `Ground`. Las herramientas no se habían corrido entre el 2026-11-09 y E1, salvo `Place Parked Cars` sobre la red del ciclista.
 - **Capacidad del PARE de C2.** En la prueba de E1 (9 min simulados) hubo un `traffic_deadlock`: un giro a la izquierda desde C2 esperó 20 s una brecha en el anillo y entró por la regla de antibloqueo. **Medida en E2:** con 460 veh/h saliendo de C2 (casi todos doblando a la derecha), 0 llegadas descartadas, cola virtual vacía y como máximo 7 autos en el acceso. Alcanza.
-- **Capacidad de las entradas (medida el 2026-11-25).** Con 700 veh/h pedidos en C2 y 650 en C4, y las entradas ya alargadas, entraron ~650 y ~490 veh/h. El límite no es el espacio sino la dinámica de los autos:
-  - **C4 (semáforo de I_NO):** los autos salen de la cola cada 3.0–3.6 s (unos 9 por verde de 25 s). Un semáforo real da ~2 s (12–13 por verde, ~750 veh/h). Es el arranque del IDM con *a* = 1.5 m/s² y sin modelo de arranque en cola.
-  - **C2 (PARE):** cada auto sale 5.8 s después del anterior (~620 veh/h): avanza, se detiene por completo (*v* < 0.3 m/s a menos de 3 m de la línea) y recién ahí evalúa la brecha. El HCM usa un tiempo de seguimiento de ~3.3 s en un PARE.
-  - **Hasta antes de esta medición** se atribuía el límite de C4 al largo de la calle de entrada; alargarla no lo cambió.
-  - **[DECISIÓN pendiente]** calibrar la salida de cola (aceleración del IDM o un tiempo de arranque) y la detención en el PARE contra valores publicados, o cambiar el control (más verde norte–sur en I_NO, CEDA en C2).
-- **Giro a la izquierda hacia C3 (de oeste a norte en I_NC).** Cede a los autos que doblan a la derecha desde el este (la ruta este de C2 → C3, ~470 veh/h). Con 150 veh/h doblando a la izquierda hubo 10 `traffic_deadlock` en 19 min. La causa es la aceptación de brecha: el tiempo de llegada se calcula con la velocidad actual del otro auto, sin contar que frena a 13 km/h para doblar, y cada auto que dobla ocupa la zona ~2.7 s; con una brecha crítica de 4.5–5.5 s, el que dobla a la izquierda necesita separaciones de más de ~8 s, que se dan 1 de cada 3 veces. La capacidad teórica (HCM) de ese giro sería ~950 veh/h. **Corregido en E3** con el tiempo de llegada con frenado anticipado ([11.5](#115-aceptación-de-brecha)): 0 bloqueos con la misma matriz.
+- **Capacidad de las entradas (medida y calibrada el 2026-11-25).** Con 700 veh/h pedidos en C2 y 650 en C4 entraban ~650 y ~490 veh/h, y alargar las entradas no lo cambió. Se encontraron cuatro causas y se corrigieron:
+  1. **No quedar sobre un paso peatonal (`paso_libre`):** un auto se detenía antes del paso si el de adelante iba a menos de 1.5 m/s, aunque estuviera arrancando. En cada verde cada auto se detenía en la línea. Ahora solo si el de adelante además no acelera (> 0.3 m/s²).
+  2. **Espacio a la salida con un paso peatonal (`bloqueo`):** se exigía el espacio ya libre detrás del paso. Ahora alcanza si el de adelante va a más de 2 m/s y, aunque frene cómodo o se detenga detrás de su líder, va a dejar ese espacio.
+  3. **IDM:** *T* de 1.3 a 1.0 s ([5.2](#52-heterogeneidad-de-conductores-driverprofile)).
+  4. **PARE:** la detención cuenta bajo 1.0 m/s a menos de 3 m de la línea (antes < 0.3 m/s; el auto se arrastraba ~1 s más).
+  - **Resultado:** C4 descarga cada 1.6–2.3 s en verde (antes 3.0–3.6 s; ~600–720 veh/h con 650 pedidos). El PARE de C2 deja salir un auto cada 4.1–4.5 s (antes 5.8 s; ~830 veh/h). Con la matriz por defecto, cero autos esperando fuera en las dos entradas (antes hasta 27 en C4).
+  - **Queda:** el PARE sigue ~1 s más lento que el tiempo de seguimiento del HCM (3.3 s para un giro a la derecha desde un PARE **[VERIFICAR]**). El resto es el avance de la cola con *a* = 1.5 m/s², que no se cambió porque afecta todo el tráfico. Un verde también baja cuando un auto que dobla a la derecha espera a los peatones del cruce paralelo (un solo carril): es real.
 - **Capacidad del PARE de C2 (medida en E3).** Con 900 veh/h pedidos de C2 a C3 entraron ~620 veh/h; 30 autos quedaron en la cola virtual y se descartaron 37 llegadas en 13 min. Ver el punto anterior.
 - **El reparto de rutas casi no depende de la congestión.** Con estos flujos el anillo está lejos de su capacidad (1 800 veh/h por carril) y el cuello de botella real, el PARE de C2, es común a las dos rutas de C2 → C3. El reparto (93/7) lo fijan los semáforos y los giros de la ruta oeste y β. Con 900 veh/h de C2 a C3 el reparto no se movió. **[DECISIÓN pendiente]** si el experimento necesita más autos por la curva oeste.
 - **Tiempo del Editor.** Al entrar en Play, el precalentamiento bloquea el hilo principal unos segundos.
@@ -1805,6 +1808,11 @@ Desde el 2026-11-13 hay además tests de la bici (filtro 1€ y paquetes del Ard
 
 - **Entradas C2 y C4 alargadas 120 m** fuera del mapa ([6.2](#62-entradas)). La reaparición tras un choque queda en el mismo lugar.
 - **Capacidad medida** con 700 y 650 veh/h pedidos: C2 ~650 veh/h (5.8 s entre salidas del PARE), C4 ~490 veh/h (3.0–3.6 s entre salidas en verde). Alargar no aumentó la capacidad: el límite es la dinámica de arranque y la detención en el PARE ([16](#16-estado-pendientes-y-limitaciones)). Un `traffic_deadlock` en 23 min con esa demanda alta.
+
+### 2026-11-25: calibración de la salida de cola y del PARE
+
+- **Reglas de los pasos peatonales** (`paso_libre` y espacio a la salida) que detenían la cola de un semáforo en cada auto; *T* del IDM de 1.3 a 1.0 s; detención práctica en el PARE (< 1.0 m/s). Detalle en [16](#16-estado-pendientes-y-limitaciones).
+- **Validación** (31 min simulados, matriz por defecto): cola virtual vacía en C2 y C4 (antes hasta 27 autos en C4), 0 `traffic_deadlock`, 0 superpuestos, 0 choques. Reparto C2 → C3 92 % / 8 %, C4 → C1 89 % / 11 %. Con las entradas alargadas, C4 → C3 tiene ahora dos rutas (la segunda, 2 %): el tiempo extra de la entrada acerca el cociente a 2.0, bajo el factor 2.2. 100 de 100 tests.
 
 ## 21. Referencias
 
