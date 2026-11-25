@@ -104,6 +104,11 @@ public class SerialBikeInput : MonoBehaviour
     // Hilo secundario. Nunca tocar UnityEngine API aca salvo Debug.*.
     private void ReadSerialLoop()
     {
+        // Al abrir el puerto, o tras descartar el buffer, la lectura empieza en medio de una linea.
+        // Ese resto ("34,..." en vez de "1234,...") puede tener igual 4 numeros validos y pasar el
+        // parser con un contador de pulsos falso, asi que la primera linea siempre se bota.
+        bool skipNextLine = true;
+
         while (isRunning)
         {
             try
@@ -112,9 +117,18 @@ public class SerialBikeInput : MonoBehaviour
                 // pulseCount es acumulativo, asi que descartar lineas
                 // intermedias no pierde pulsos, solo resolucion temporal.
                 if (serialPort.BytesToRead > maxBacklogBytes)
+                {
                     serialPort.DiscardInBuffer();
+                    skipNextLine = true;
+                }
 
                 string line = serialPort.ReadLine();
+
+                if (skipNextLine)
+                {
+                    skipNextLine = false;
+                    continue;
+                }
 
                 if (TryParseLine(line, out RawSensorData parsed))
                 {

@@ -9,6 +9,7 @@
 // ============================================================
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -34,6 +35,42 @@ public class ExperimentLogger : MonoBehaviour
     [SerializeField] private float flushIntervalSec = 1f;
 
     public string SessionBasePath { get; private set; }
+
+    // ------------------------------------------------------------
+    // Columnas extra del CSV continuo
+    // ------------------------------------------------------------
+    private static readonly List<(string header, Action<StringBuilder> append)> extraColumns =
+        new List<(string, Action<StringBuilder>)>();
+
+    /// <summary>
+    /// Agrega columnas al final de _continuous.csv. Llamar en Awake (este logger escribe el
+    /// encabezado en su Awake, que corre despues por orden de ejecucion).
+    /// header: nombres separados por coma. append: escribe los valores de este tick, separados
+    /// por coma, sin coma al inicio ni al final, y con InvariantCulture.
+    /// </summary>
+    public static void RegisterContinuousColumns(string header, Action<StringBuilder> append)
+    {
+        if (string.IsNullOrEmpty(header) || append == null) return;
+        extraColumns.Add((header, append));
+    }
+
+    private static readonly List<string> extraMeta = new List<string>();
+
+    /// <summary>
+    /// Agrega una linea "clave=valor" a _meta.txt. Llamar en Awake, igual que RegisterContinuousColumns.
+    /// </summary>
+    public static void RegisterMeta(string key, string value)
+    {
+        if (!string.IsNullOrEmpty(key)) extraMeta.Add($"{key}={value}");
+    }
+
+    // Con "Enter Play Mode" sin recarga de dominio, los estaticos sobreviven entre sesiones
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        extraColumns.Clear();
+        extraMeta.Clear();
+    }
 
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
     private static readonly char[] CsvSpecialChars = { ',', '"', '\n', '\r' };
@@ -72,9 +109,11 @@ public class ExperimentLogger : MonoBehaviour
         if (logContinuous)
         {
             continuousWriter = new StreamWriter(SessionBasePath + "_continuous.csv", false, utf8);
-            continuousWriter.WriteLine("t_session,t_unity,tick,pos_x,pos_y,pos_z,yaw_deg,speed_mps," +
-                                       "steer_phys_deg,steer_eff_deg,yaw_rate_dps," +
-                                       "route_dist_m,lateral_offset_m,off_route,input_source,route_path");
+            string header = "t_session,t_unity,tick,pos_x,pos_y,pos_z,yaw_deg,speed_mps," +
+                            "steer_phys_deg,steer_eff_deg,yaw_rate_dps," +
+                            "route_dist_m,lateral_offset_m,off_route,input_source,route_path";
+            foreach (var extra in extraColumns) header += "," + extra.header;
+            continuousWriter.WriteLine(header);
         }
 
         EventBus.OnEvent += HandleEvent;
@@ -118,6 +157,12 @@ public class ExperimentLogger : MonoBehaviour
             sb.Append(',');
             if (hasRoute) sb.Append(route.CurrentPath.name);
 
+            foreach (var extra in extraColumns)
+            {
+                sb.Append(',');
+                extra.append(sb);
+            }
+
             continuousWriter.WriteLine(sb.ToString());
         }
 
@@ -159,7 +204,7 @@ public class ExperimentLogger : MonoBehaviour
 
     private void WriteMeta()
     {
-        var lines = new[]
+        var lines = new List<string>
         {
             $"participant={participantId}",
             $"condition={conditionId}",
@@ -170,6 +215,7 @@ public class ExperimentLogger : MonoBehaviour
             $"fixed_dt={Time.fixedDeltaTime.ToString("F5", Inv)}",
             $"cyclist_network_length_m={(route != null ? route.LengthM.ToString("F2", Inv) : "")}",
         };
+        lines.AddRange(extraMeta);
         File.WriteAllLines(SessionBasePath + "_meta.txt", lines);
     }
 
