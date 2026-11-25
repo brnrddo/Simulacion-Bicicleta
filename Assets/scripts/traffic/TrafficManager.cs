@@ -122,6 +122,7 @@ public class TrafficManager : MonoBehaviour
     private readonly List<TrafficLane> lanes = new List<TrafficLane>();
     private readonly List<TrafficSpawner> spawners = new List<TrafficSpawner>();
     private readonly List<TrafficVehicle> vehicles = new List<TrafficVehicle>();  // orden de Id (determinista)
+    private readonly Dictionary<int, TrafficVehicle> vehiclesById = new Dictionary<int, TrafficVehicle>();
     private readonly List<TrafficVehicle> toRemove = new List<TrafficVehicle>();
     private readonly Dictionary<TrafficLane, BikeOnLane> bikeOnLane = new Dictionary<TrafficLane, BikeOnLane>();
 
@@ -403,8 +404,11 @@ public class TrafficManager : MonoBehaviour
 
         // No quedar detenido sobre un paso peatonal por la cola: si el lider es un auto lento y detenerse detras de el
         // dejaria al auto encima del paso, se detiene antes del paso (como se espera de un conductor)
+        // Solo si el lider se esta deteniendo o detenido: uno que arranca (cola que se descarga en verde) va a dejar
+        // espacio. Hasta el 2026-11-25 bastaba con que fuera lento, y en cada verde cada auto se detenia en la linea
+        // hasta que el de adelante pasaba 1.5 m/s (la salida de cola de un semaforo bajaba a ~3.3 s por auto).
         if (!float.IsPositiveInfinity(nearestCwStopM) && gap > nearestCwStopM && leaderSpeed < 1.5f &&
-            leaderName.StartsWith("auto#"))
+            leaderName.StartsWith("auto#") && !IsPullingAway(leaderName))
         {
             float restFront = gap - v.Params.minGapM;                 // donde quedaria su frente
             float farEdge = nearestCwStopM + 1f + nearestCwWidthM;     // borde lejano del paso
@@ -415,6 +419,19 @@ public class TrafficManager : MonoBehaviour
                 leaderName = "paso_libre";
             }
         }
+    }
+
+    /// <summary>Velocidad bajo la cual un auto cuenta como detenido en un PARE (m/s), a menos de 3 m de la linea.</summary>
+    private const float StopSignSpeedMps = 1.0f;
+
+    /// <summary>Aceleracion con la que un lider se considera "arrancando" (m/s2).</summary>
+    private const float PullingAwayAccelMps2 = 0.3f;
+
+    /// <summary>El auto con esa etiqueta ("auto#Id") esta acelerando: no se va a detener enseguida.</summary>
+    private bool IsPullingAway(string label)
+    {
+        if (!int.TryParse(label.Substring(5), out int id) || !vehiclesById.TryGetValue(id, out var leader)) return false;
+        return leader.Accel > PullingAwayAccelMps2;
     }
 
     private void FindLeaderCore(TrafficVehicle v, out float gap, out float leaderSpeed, out string leaderName)
@@ -745,10 +762,12 @@ public class TrafficManager : MonoBehaviour
         StopLine line = entry.StopLine;
         bool minor = line != null && (line.Control == ApproachControl.Stop || line.Control == ApproachControl.Yield);
 
-        // PARE: detencion completa en la linea antes de evaluar la brecha
+        // PARE: detencion en la linea antes de evaluar la brecha. Cuenta como detencion bajar de StopSignSpeedMps en los
+        // ultimos 3 m (detencion practica); hasta el 2026-11-25 se exigia < 0.3 m/s y el auto se arrastraba ~1 s mas
+        // hasta la linea: en cola salia un auto cada ~5.8 s, contra ~3.3 s del HCM.
         if (line != null && line.Control == ApproachControl.Stop && v.StoppedAtLineOf != entry)
         {
-            if (v.Speed < 0.3f && distanceToLineM < 3f) v.StoppedAtLineOf = entry;
+            if (v.Speed < StopSignSpeedMps && distanceToLineM < 3f) v.StoppedAtLineOf = entry;
             else return "pare";
         }
 
@@ -889,9 +908,15 @@ public class TrafficManager : MonoBehaviour
             {
                 var last = exit.Vehicles[0];  // el de S mas bajo = el ultimo de la cola
                 float rear = offset + last.S - last.LengthM * 0.5f;
-                // Si la cola avanza se puede entrar; salvo que haya un paso peatonal: si la cola se detiene,
-                // el auto quedaria encima del paso
-                return rear >= needed || (last.Speed > 2f && !crosswalkAhead);
+                if (rear >= needed) return true;
+                // Si la cola avanza se puede entrar
+                if (!crosswalkAhead) return last.Speed > 2f;
+                // Con un paso peatonal: si la cola se detiene el auto quedaria encima del paso. Alcanza si el de adelante,
+                // aunque frene comodo o se detenga detras de su propio lider, va a dejar el espacio (antes se exigia el
+                // espacio ya libre, y la salida de cola de un semaforo con paso a la salida se cortaba en cada auto)
+                float willAdvance = Mathf.Min(last.Speed * last.Speed / (2f * Mathf.Max(last.Params.comfortDecelMps2, 0.1f)),
+                                              Mathf.Max(0f, last.LastGapM - last.Params.minGapM));
+                return last.Speed > 2f && rear + willAdvance >= needed;
             }
             offset += exit.LengthM;
             exit = exit.NextLanes.Count == 1 ? exit.NextLanes[0].lane : null;
@@ -1084,6 +1109,7 @@ public class TrafficManager : MonoBehaviour
 
         lane.Vehicles.Insert(0, v);
         vehicles.Add(v);
+        vehiclesById[v.Id] = v;
         return v;
     }
 
@@ -1093,6 +1119,7 @@ public class TrafficManager : MonoBehaviour
         {
             v.Lane?.Vehicles.Remove(v);
             vehicles.Remove(v);
+            vehiclesById.Remove(v.Id);
             ReturnToPool(v);
         }
         toRemove.Clear();

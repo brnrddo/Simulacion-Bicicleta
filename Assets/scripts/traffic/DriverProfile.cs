@@ -21,9 +21,11 @@ public class DriverProfile : ScriptableObject
     public Vector2 speedFactorRange = new Vector2(0.8f, 1.2f);
 
     [Header("T: tiempo de separacion (s)")]
-    public float timeHeadwayMean = 1.3f;
+    [Tooltip("1.0 s: trafico urbano (Treiber y Kesting 2013). Con a = 1.5 m/s2 la cola de un semaforo sale cada ~1.95 s " +
+             "(~1 850 veh/h), cerca de los 1 900 veh/h por carril del HCM. Hasta el 2026-11-25 era 1.3 s (~2.25 s por auto).")]
+    public float timeHeadwayMean = 1.0f;
     public float timeHeadwaySd = 0.2f;
-    public Vector2 timeHeadwayRange = new Vector2(0.8f, 2.0f);
+    public Vector2 timeHeadwayRange = new Vector2(0.7f, 1.6f);
 
     [Header("s0: distancia minima detenido (m)")]
     public float minGapMean = 2.0f;
