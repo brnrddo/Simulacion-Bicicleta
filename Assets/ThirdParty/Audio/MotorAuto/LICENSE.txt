@@ -1,0 +1,6 @@
+"Vehicle_Car_Peugeot_308_Idle_Exterior_Loop_Mono_02.wav"
+de Nox_Sound (https://freesound.org/people/Nox_Sound/sounds/522225/)
+Licencia: Creative Commons 0 (CC0 1.0, dominio publico).
+
+Uso en este proyecto: motor de los autos del trafico (tono y volumen segun la
+velocidad). Descargado de Freesound el 2026-11-11. Cambios: convertido a 16 bits.

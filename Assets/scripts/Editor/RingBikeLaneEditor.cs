@@ -118,7 +118,7 @@ public static class RingBikeLaneEditor
         var crosswalks = Object.FindObjectsByType<Crosswalk>(FindObjectsSortMode.None);
         bool Allowed(Vector3 p)
         {
-            if (!Physics.Raycast(p + Vector3.up * 3f, Vector3.down, out RaycastHit hit, 6f)) return false;
+            if (!Physics.Raycast(p + Vector3.up * 3f, Vector3.down, out RaycastHit hit, 6f, 1 << LayerMask.NameToLayer("Ground"))) return false;  // solo el suelo: no los autos estacionados
             if (!hit.collider.name.StartsWith(RoadPrefix)) return false;  // dentro de una interseccion
             return !OnCrosswalk(crosswalks, p, CrosswalkMarginM);
         }

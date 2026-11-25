@@ -34,6 +34,7 @@ El contenido de terceros conserva su propia licencia y NO queda bajo MIT
     Decayed" de Felipe Carvajal Brown (CC BY 4.0, atribucion obligatoria).
   - Assets/ThirdParty/Vehicles: Quaternius (CC0) y "Montreal Bus" de Nick Ladd
     (CC BY 3.0, atribucion obligatoria; ver LEEME.txt y LICENSE.txt).
+  - Assets/ThirdParty/Audio: grabaciones de Freesound (CC0).
   - Assets/ThirdParty/Rocketbox: Microsoft Rocketbox (MIT, ver su LICENSE).
   - Paquetes de Unity, Meta y osm2unity (BSD 3-Clause) instalados por el
     Package Manager.

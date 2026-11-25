@@ -4,8 +4,8 @@
 
 - **Proyecto:** `C:\Lab\Simulacion` (Unity), laboratorio de Ingeniería en Transporte, Universidad de Chile.
 - **Responsable del estudio:** Bernardo.
-- **Plan de implementación:** `PLAN_TRAFICO.md` (fases 0 y T2–T8).
-- **Estado:** fases 0, T2, T3, T4 y T6 terminadas (T5 se dejó para después, por decisión de Bernardo). El 2026-10-13 se corrigieron los problemas vistos en el visor (sección 20). Falta repetir la prueba en el visor. Ver la [sección 16](#16-estado-pendientes-y-limitaciones).
+- **Plan de implementación:** `PLAN_TRAFICO.md` (fases 0 y T2–T6). Desde el 2026-11-12, lo pendiente (la medición de agentes, T7) está en `PLAN_DATOS_Y_SINCRONIZACION.md`, junto con la sincronización. La integración con el experimento (antes T8) se replanificará. Desde el 2026-11-13, el experimento de elección de ruta (C2 → C3) está en `PLAN_EXPERIMENTO_RUTAS.md` (fases E0–E7).
+- **Estado:** fases 0, T2, T3, T4 y T6 terminadas (T5 se dejó para después, por decisión de Bernardo). El 2026-10-13 se corrigieron los problemas vistos en el visor (sección 20). Falta repetir la prueba en el visor. El 2026-11-25 se terminó E1: se quitaron dos calles y la red quedó con los nodos C1–C4 ([4.1](#41-topología)). Ver la [sección 16](#16-estado-pendientes-y-limitaciones).
 - **Convención:** este documento se actualiza en cada paso de implementación. Los valores marcados con **[VERIFICAR]** deben confirmarse antes de publicarse.
 
 ---
@@ -81,7 +81,7 @@ El tráfico es una **micro-simulación en una red de carriles** (grafo dirigido 
 
 `TrafficManager` ejecuta **un único paso sincronizado** por `FixedUpdate` (orden de ejecución 20, después de la bicicleta):
 
-0. Avanzar los semáforos (`IntersectionController.Tick`) y el regulador de salida (`RingExitController.Tick`).
+0. Avanzar los semáforos (`IntersectionController.Tick`). Hasta el 2026-11-25 también avanzaba el regulador de salida (`RingExitController`), que se quitó con la calle x = 60 ([6.4](#64-regulación-de-la-salida-quitada)).
 1. Proyectar al ciclista sobre los carriles.
 2. Generar autos (spawners).
 3. Ordenar los autos de cada carril por *S* (ordenamiento por inserción; las listas casi siempre ya están ordenadas, así que es O(n)).
@@ -104,7 +104,7 @@ Separar el cálculo de aceleraciones (fase 1) de la integración (fase 2) es la 
 | `StopLine` | Línea de detención (semáforo, PARE o CEDA EL PASO) y eventos del ciclista en la línea |
 | `IntersectionLaneBuilder` | Generador de los carriles, conectores y conflictos de una intersección |
 | `CyclistNetwork` / `CyclistPath` / `RiderRoute` | Red de caminos del ciclista y seguimiento del ciclista sobre ella |
-| `RingExitController` | Regula la salida de autos para mantener estable la cantidad |
+| `OdNode` | Nodo origen o destino (C1–C4): carril por el que los autos entran o salen de la red |
 | `ExperimentLogger` / `EventBus` | Registro de datos |
 
 ---
@@ -115,13 +115,29 @@ Separar el cálculo de aceleraciones (fase 1) de la integración (fase 2) es la 
 
 ### 4.1 Topología
 
-- **Circuito (anillo):** dos rectas E–O (z ≈ ±50) unidas por dos curvas (x ≈ ±150).
+- **Circuito (anillo):** dos rectas E–O (z ≈ ±50, de x = −121 a 121) unidas por dos curvas que llegan a x ≈ ±177.
   - **Anillo exterior:** circula en sentido antihorario visto desde arriba: hacia el este por la recta sur y hacia el oeste por la recta norte. Carriles `Lane_Main_*`.
   - **Anillo interior:** sentido horario. Carriles `Lane_Main2_*`.
 - **Calles transversales de sentido único:**
-  - x = 4: hacia el norte (`Lane_North_01..03`). Entrada a la red desde el sur.
-  - x = −60: hacia el sur (`Lane_South_01..03`). Entrada a la red desde el norte.
-  - x = 60, al sur del circuito: hacia el sur (`Lane_Extra`). **Calle de salida regulada** ([6.4](#64-regulación-de-la-salida-ringexitcontroller)).
+  - x = 4: hacia el norte. Desde el 2026-11-25 (E1) **no cruza el circuito**: llega al anillo desde el sur (`Lane_North_01`) y sale del anillo hacia el norte (`Lane_North_03`).
+  - x = −60: hacia el sur (`Lane_South_01..03`). Entrada a la red desde el norte y salida hacia el sur.
+  - ~~x = 60, al sur del circuito: calle de salida regulada (`Lane_Extra`)~~. **Quitada en E1.**
+
+**Nodos origen–destino (`OdNode`, objeto `Nodos_OD`, desde E1).** Son los únicos puntos por donde los autos entran o salen de la red:
+
+| Nodo | Dónde | Tipo | Carril |
+|---|---|---|---|
+| C1 | Extremo sur de x = −60 | Salida | `Lane_South_03` |
+| C2 | Extremo sur de x = 4 | Entrada | `Lane_North_01` |
+| C3 | Extremo norte de x = 4 | Salida | `Lane_North_03` |
+| C4 | Extremo norte de x = −60 | Entrada | `Lane_South_01` |
+
+**Cambios al mapa (E1, `SimBici > Remove Streets`, `StreetRemoverEditor.cs`).** Para el experimento de elección de ruta (C2 → C3 tiene dos caminos de largo parecido, por la curva este o por la oeste):
+
+- **Calle x = 60:** se quitaron la calzada, sus 2 esquinas de asfalto, sus 4 veredas, 6 árboles, 3 faroles y 28 marcas transversales que cruzaban el anillo. Queda el pasto del terreno. La solera exterior de la recta sur se cerró con un tramo de vereda nuevo de 17.5 m.
+- **Tramo de x = 4 dentro del circuito:** la calzada se recortó en el eje de las rectas del anillo (z = ±49.76), como la antigua T de x = 60. Su malla era la misma de la calle x = −60, así que se guardó una copia recortada (`Assets/AssetsLab/Generated/E1_Calle_RicardoLyon.asset`). Se quitaron las 4 esquinas interiores. Primero se dejó un paseo (las dos veredas laterales con pasto entre ellas); el mismo día, a pedido de Bernardo (sin pasto ni calzada entre C2 y C3), el tramo se **rellenó con tres edificios** copiados de la ciudad: `Block_E1_x4_S` (copia de `Block_14`, café, 7 m), `Block_E1_x4_C` (de `Block_19`, beige, 17.5 m) y `Block_E1_x4_N` (de `Block_15`, blanco, 17.5 m), escalados entre 0.99 y 1.14 a la manzana (x de −7.9 a 15.0). Se apagaron las dos veredas laterales y 3 postes de farol que quedaban dentro. Las soleras interiores de las dos rectas se cerraron con tramos de vereda de 18 m, 1 cm más altos que los vecinos (como las esquinas originales) para que no parpadeen donde se superponen.
+- **Red:** se borraron `Lane_Extra`, `Cruce_SE` (con `RingExitController`) y `Lane_North_02`. Los carriles del anillo que pasaban por `Cruce_SE` se unieron directo (`Lane_Main_01` → `Lane_Main_02` y `Lane_Main2_02` → `Lane_Main2_04`). I_SC e I_NC quedaron en T, y se apagó el PARE del acceso sur de I_NC.
+- **Nada de la geometría se borró:** quedó apagado con el sufijo ` (E1 off)` (58 objetos). Respaldos: `test_backup_2026-11-25_preE1.unity` y, antes de los edificios, `test_backup_2026-11-25_preEdificios.unity`.
 
 ### 4.2 Intersecciones
 
@@ -129,9 +145,9 @@ Separar el cálculo de aceleraciones (fase 1) de la integración (fase 2) es la 
 |---|---|---|---|
 | `Interseccion_NO` (I_NO) | (−60, 50) | Semáforo | N, E, O (el brazo S es solo de salida) |
 | `Interseccion_SO` (I_SO) | (−60, −50) | Semáforo | N, E, O |
-| `Cruce_S_Centro` (I_SC) | (4, −50) | Prioridad del circuito; **PARE** en el acceso S | O, E, S |
-| `Cruce_N_Centro` (I_NC) | (4, 50) | Prioridad del circuito; **PARE** en el acceso S | O, E, S |
-| `Cruce_SE` (I_SE) | (60, −50) | Prioridad (en T; el brazo S es solo de salida) | O, E |
+| `Cruce_S_Centro` (I_SC) | (4, −50) | En T desde E1. Prioridad del circuito; **PARE** en el acceso S (C2) | O, E, S |
+| `Cruce_N_Centro` (I_NC) | (4, 50) | En T desde E1. Prioridad del circuito (el brazo N, C3, es solo de salida) | O, E |
+| ~~`Cruce_SE` (I_SE)~~ | (60, −50) | Quitada en E1 | — |
 
 *Acceso* = brazo por el que **llegan** los autos (Norte = vienen desde el norte).
 
@@ -206,7 +222,7 @@ Se hizo a partir de las fotos de referencia de `Documentacion/A2_referencias/ref
 | Recta sur del anillo | AV. PROVIDENCIA |
 | x = −60 | PEDRO DE VALDIVIA |
 | x = 4 | RICARDO LYON |
-| x = 60 | LOS LEONES |
+| x = 60 | LOS LEONES (calle quitada en E1; sus placas ya no se colocan) |
 
 **Fuera de alcance, por decisión de Bernardo:** quioscos, cables aéreos y cambio del modelo de los árboles.
 
@@ -284,13 +300,15 @@ Cada auto sortea sus parámetros al aparecer, de normales truncadas (recortadas 
 | Parámetro | Media | DE | Rango | Nota |
 |---|---|---|---|---|
 | Factor de velocidad deseada | 1.00 | 0.08 | 0.8–1.2 | *v₀* = límite × factor |
-| *T* (s) | 1.3 | 0.2 | 0.8–2.0 | Punto de partida urbano; calibrar en piloto |
+| *T* (s) | 1.0 | 0.2 | 0.7–1.6 | Tráfico urbano (Treiber y Kesting 2013). Hasta el 2026-11-25: 1.3 (0.8–2.0). Ver la calibración abajo |
 | *s₀* (m) | 2.0 | 0.3 | 1.2–3.0 | Ídem |
 | *a* (m/s²) | 1.5 | 0.2 | 0.9–2.2 | Ídem |
 | *b* (m/s²) | 2.0 | 0.3 | 1.3–3.0 | Ídem |
 | δ | 4 | — | — | Treiber et al. (2000) |
 | Brecha crítica (s) | 4.5 | 0.6 | 3.0–7.0 | [11.5](#115-aceptación-de-brecha) |
 | Brecha extra desde PARE/CEDA (s) | +2.0 | — | — | [11.5](#115-aceptación-de-brecha) |
+
+**Calibración de la salida de cola (2026-11-25).** Con *T* = 1.3 s el IDM descarga una cola detenida cada ~2.25 s (1 600 veh/h); con *T* = 1.0 s y *a* = 1.5 m/s², cada ~1.95 s (~1 850 veh/h), cerca de los 1 900 veh/h por carril de flujo de saturación base del *Highway Capacity Manual* **[VERIFICAR edición]**. Medido en la escena: 1.6–2.3 s entre autos en un verde sin giros que cedan a peatones.
 
 Normal estándar por Box–Muller con `System.Random`: *z* = √(−2 ln *u*₁) · cos(2π*u*₂), con *u*₁ ∈ (0, 1].
 
@@ -369,6 +387,23 @@ Normal estándar por Box–Muller con `System.Random`: *z* = √(−2 ln *u*₁)
 
 ---
 
+### 5.4 Sonido (desde el 2026-11-11)
+
+La bici no tiene sonido: el participante oye la real. `TrafficAudio` (objeto `Audio`, armado con `SimBici > Build Audio Setup`) es solo presentación y no cambia la simulación.
+
+- **Espacialización:** Meta XR Audio (paquete `com.meta.xr.sdk.audio` 209.0.0, HRTF), que es el espacializador del proyecto. Cada fuente 3D usa `spatialize = true`.
+- **Ambiente:** bucle 2D de 2 min con tráfico lejano de ciudad (grabación CC0 de janbezouska). Volumen 0.35.
+- **Vehículos:** un grupo de 10 voces 3D se asigna cada 0.1 s a los vehículos más cercanos al oyente (hasta 45 m), con entrada y salida suaves de 0.35 s. Atenuación logarítmica de 2 a 60 m. El Doppler lo calcula Unity y se anula 0.25 s al reasignar una voz, porque el salto de posición no es velocidad.
+  - **Autos:** motor en ralentí grabado (Peugeot 308, CC0 de Nox_Sound), con tono 0.9 + 0.035·*v* y volumen 0.35 + 0.012·*v*; más ruido de neumático procedural (pasabanda de 900 Hz y retumbo grave), con volumen ∝ (*v*/13.9)^1.5 y tono de 0.7 a 1.25.
+  - **Bus eléctrico:** casi sin motor. Neumático más grave (tono ×0.75) y fuerte (×1.4), zumbido del inversor (tono con armónicos de 300 Hz que sube con la velocidad) y murmullo de ventilación de 250 Hz. Ambos son procedurales.
+- **Volúmenes por categoría:** `AmbientVolume`, `CarVolume` y `BusVolume` (0–1), para manipularlos o apagarlos por condición. Se registran en el evento `audio_start`.
+- **Calibración [VERIFICAR] en el visor con un medidor de nivel:**
+  - auto a 50 km/h: ~70 dB(A) a 7.5 m (límite europeo de ruido de paso);
+  - bus eléctrico lento: 56–65 dB(A);
+  - ambiente: ~50 dB(A).
+- **Azar:** las fases de inicio de los bucles usan `CreateRng(semilla, 6000)`. El ruido procedural usa semillas fijas.
+- **Grabaciones:** en `Assets/ThirdParty/Audio`. El ambiente es el tramo de 35 a 155 s del original, cerrado en bucle con un fundido de 2 s y pasado a 16 bits; el motor solo se pasó a 16 bits.
+
 ## 6. Generación de demanda y nivel de tráfico
 
 ### 6.1 Llegadas
@@ -387,28 +422,34 @@ Un auto aparece con la cola en el inicio del carril y solo si hay espacio según
 - el ciclista;
 - los autos que vienen llegando desde el carril anterior.
 
-Si no hay espacio, la llegada queda pendiente (máximo 5) y se descartan las que excedan ese máximo (se cuentan).
+Si no hay espacio, la llegada queda en una **cola virtual fuera de la red** (máximo 30) y entra apenas hay espacio; las que exceden ese máximo se descartan y se cuentan. Hasta E2 el máximo era 5: en C4, cuya cola del rojo llega hasta el punto de aparición, se perdía el 15 % de la demanda.
 
 ### 6.2 Entradas
 
-No hay spawners en el anillo: el ciclista veía aparecer autos de la nada. Los autos entran solo por los bordes del mapa:
+No hay spawners en el anillo: el ciclista veía aparecer autos de la nada. Los autos entran solo por los nodos de entrada (desde E2, con el flujo de la matriz origen–destino):
 
-| Spawner | Carril | Flujo nominal | Acceso a la red |
+| Spawner | Nodo | Carril | Acceso a la red |
 |---|---|---|---|
-| `Spawner_01` | `Lane_North_01` (x = 4, desde z = −128) | 400 veh/h | PARE en I_SC |
-| `Spawner_02` | `Lane_South_01` (x = −60, desde z = 128) | 400 veh/h | Semáforo en I_NO |
+| `Spawner_01` | C2 | `Lane_North_01` (x = 4, desde z = −248; hasta el 2026-11-25, −128) | PARE en I_SC |
+| `Spawner_02` | C4 | `Lane_South_01` (x = −60, desde z = 248; hasta el 2026-11-25, 128) | Semáforo en I_NO |
 
-### 6.3 Nivel de tráfico
+**Entradas alargadas (2026-11-25, `SimBici > Extend Entries`, `EntryExtenderEditor.cs`).** Las dos calles de entrada siguen 120 m más allá del borde del mapa, sobre el pasto (asfalto nuevo, sin veredas), para que la cola quepa en la calle. La reaparición tras un choque (`respawnDistanceM` = 120) quedó en el mismo lugar. **No aumentan la capacidad** de las entradas (ver [16](#16-estado-pendientes-y-limitaciones)): solo cambian una cola "fuera de la red" por una cola visible.
 
-El nivel de toda la escena se controla con un solo parámetro, `Flow Multiplier` (*m*), en `TrafficManager`:
+### 6.3 Matriz origen–destino (desde el 2026-11-25, E2)
 
-- **Flujo efectivo de cada spawner:** *q* = *q*nominal × *m* × β, con β = 3 durante el precalentamiento y 1 en la sesión.
-- **Cantidad objetivo de autos:** *N*\* = round(`vehiclesPerLevel` × *m*), con `vehiclesPerLevel` = 30. Nivel 1 → 30 autos; nivel 2 → 60.
-- **Tope:** un spawner no genera mientras haya *N* ≥ *N*\* autos activos (la llegada queda pendiente).
+La demanda se entrega antes de empezar como una **matriz origen–destino** en veh/h (`OdDemand` en el objeto `Traffic`, lógica en `OdMatrix`):
 
-**Precalentamiento:** antes de empezar se simulan 120 s de tráfico sin ciclista, para que la red no arranque vacía. Al terminar se eliminan los autos a menos de 20 m del ciclista. Ese tiempo es simulado, no real.
+- **Archivo:** JSON con una lista de pares `{from, to, meanVehPerHour, sdVehPerHour}`. Por defecto `Assets/AssetsLab/Config/od_matriz_base.json`; en el Inspector de `OdDemand` se puede poner otro (ruta absoluta o relativa a `Documentos/SimBici/Config`). Los pares que no aparecen valen 0. Si el archivo no existe o un par no va de un nodo de entrada a uno de salida, se informa (`od_error`) y **no se genera tráfico**.
+- **Sorteo por repetición:** cada celda es *q* = max(0, N(media, sd)) con Box–Muller y `CreateRng(seed, 7000)`, una vez al iniciar, antes del precalentamiento.
+- **Matriz por defecto** (dibujo del 2026-11-13): C2 → C3 500, C2 → C1 10, C4 → C1 500, C4 → C3 10 veh/h. La sd es provisoria, 10 % de la media **[VERIFICAR con Bernardo]**.
+- **Spawners:** el flujo de cada spawner es la suma de su fila. En cada llegada se sortea el destino con probabilidad *q*(i, j) / Σ *q*(i, ·), y después el vehículo entre los que tienen ruta a ese destino (el bus no cabe en todos los giros). Destino, vehículo y conductor se conservan mientras la llegada espera.
+- **Sin nivel de tráfico ni tope:** se quitaron `Flow Multiplier`, `vehiclesPerLevel` y el tope de autos. Se mantiene el tope de 2 buses.
 
-### 6.4 Regulación de la salida (`RingExitController`)
+**Precalentamiento:** antes de empezar se simulan **180 s** de tráfico sin ciclista (120 s hasta E2), **sin refuerzo de flujo** (hasta E2 los spawners generaban ×3), para que la red no arranque vacía y los flujos ya sean los de la matriz. Al terminar se eliminan los autos a menos de 20 m del ciclista y los contadores de `od_flow` parten de cero. Ese tiempo es simulado, no real.
+
+### 6.4 Regulación de la salida (quitada)
+
+**Quitada el 2026-11-25 (E1), junto con la calle x = 60.** Desde E2 cada auto sale por su destino ([6.3](#63-matriz-origendestino-desde-el-2026-11-25-e2)). Se conserva la descripción de cómo funcionaba:
 
 Para que la cantidad sea estable y el tráfico se renueve, una calle de salida (`Lane_Extra`, en I_SE) regula qué proporción *p* de los autos del anillo sale de la red. Se recalcula cada 1 s:
 
@@ -420,24 +461,68 @@ Con *p₀* = 0.30, *K* = 1.0, *p*min = 0.05 y *p*max = 0.80.
 
 En los accesos del anillo a I_SE, el conector que sale recibe peso 100·*p*. Los demás movimientos se reparten 100·(1 − *p*) conservando su proporción original. Con más autos que el objetivo salen más; con menos, se quedan circulando.
 
-### 6.5 Pesos de giro
+### 6.5 Pesos de giro (sin uso desde E2)
+
+Desde E2 los autos siguen su ruta al destino y estos pesos no se usan; `IntersectionLaneBuilder` los sigue escribiendo. Valores hasta E2:
 
 | Accesos | Recto / derecha / izquierda | Objetivo |
 |---|---|---|
-| Calles que llegan desde afuera (I_SC S, I_NC S, I_NO N, I_SO N) | 20 / 40 / 40 | Propensos a entrar al anillo |
+| Calles que llegan desde afuera (I_SC S, I_NO N, I_SO N; I_NC S hasta E1) | 20 / 40 / 40 | Propensos a entrar al anillo |
 | Accesos del anillo en I_SC, I_NC, I_NO, I_SO | 90 / 5 / 5 | Los autos siguen circulando |
-| Accesos del anillo en I_SE | Regulados por *p* | Salida |
+| ~~Accesos del anillo en I_SE~~ | Regulados por *p* (hasta E1) | Salida |
 | Por defecto en el builder | 70 / 20 / 10 | Valor del plan, confirmado por Bernardo |
 
 ---
 
 ## 7. Ruteo
 
-Al entrar a un carril, el auto elige el siguiente al azar con probabilidad proporcional a los pesos de `nextLanes`.
+**Ruta completa al destino.** Cada auto nace con su destino ([6.3](#63-matriz-origendestino-desde-el-2026-11-25-e2)) y una ruta: la lista de carriles desde el de aparición hasta el de salida (`TrafficVehicle.Route`). La ruta no cambia en el camino. Historia:
 
-**Elección con dos carriles de anticipación:** cada auto conoce su carril actual, el siguiente (`NextLane`) y el subsiguiente (`NextNextLane`). Es necesario porque los carriles de llegada a una intersección miden solo 1–3 m: con un solo paso de anticipación, el auto sabría qué giro hará cuando ya está en la línea, demasiado tarde para frenar.
+- hasta E2, el auto elegía el carril siguiente al azar según los pesos de `nextLanes` (generador con offset 0);
+- en E2, la ruta más rápida a flujo libre (Dijkstra, `RoutePlanner`, ya borrado);
+- **desde E3 (2026-11-25), elección logit con la congestión del momento** (`RouteChoice` en el objeto `Traffic`, matemática en `RouteChoiceModel`).
 
-El ruteo es estocástico pero determinista: usa un generador con semilla propio ([8](#8-reproducibilidad)).
+### 7.1 Rutas posibles
+
+Para cada par (carril de aparición, carril de destino) se enumeran las rutas que no repiten carril ni intersección. Se guardan hasta `maxRoutes` = 2, descartando las que a red vacía tardan más de `maxRouteTimeFactor` = 2.2 veces la mejor. Un bus solo usa los conectores donde cabe. Con la red de E1:
+
+| Par | Rutas (tiempo a red vacía, con demora por control) |
+|---|---|
+| C2 → C3 | Este (I_SC derecha, I_NC derecha): 50.4 s · Oeste (I_SC izquierda, I_SO e I_NO recto, I_NC izquierda): 75.9 s |
+| C4 → C1 | Directo (I_NO e I_SO recto): 38.9 s · Por la curva oeste (I_NO derecha, I_SO derecha): 58.1 s |
+| C2 → C1 | Directo: 41.4 s (la vuelta larga, 86.0 s, se descarta) |
+| C4 → C3 | Directo: 34.6 s (la vuelta larga se descarta) |
+
+### 7.2 Tiempo de cada tramo (BPR)
+
+$$
+t_a = (t_{0,a} + d_a)\left[1 + \alpha\left(\frac{v_a}{c_a}\right)^{\gamma}\right],\qquad \alpha = 0.15,\ \gamma = 4
+$$
+
+- *t*0: largo / límite de velocidad.
+- *v*: autos que **entraron** al tramo en los últimos 120 s simulados, en veh/h (se cuenta a la entrada para que una cola no haga parecer vacío el tramo).
+- *d* y *c* según el control. Flujo de saturación *s* = 1 800 veh/h.
+
+  | Tramo | *d* | *c* |
+  |---|---|---|
+  | Llegada a un semáforo | *C*(1 − *g*/*C*)²/2 = 10.2 s (*C* = 60 s, *g* = 25 s) | *s g*/*C* = 750 veh/h |
+  | Llegada a un PARE | 3 s | *s* |
+  | Giro que cede (conector) | 3 600 / *c* | HCM: *q*c e^(−*q*c *t*c/3600) / (1 − e^(−*q*c *t*f/3600)), con *q*c el flujo actual de los movimientos a los que cede, *t*c = 4.5 s (+2 s desde un PARE), *t*f = 2.2 s (3.3 s desde un PARE) |
+  | Resto | 0 | *s* |
+
+  La demora por control hace que el logit "vea" los semáforos y los giros que ceden, y la capacidad HCM hace que el giro a la izquierda de la ruta oeste se encarezca cuando la ruta este se carga.
+
+### 7.3 Elección (logit)
+
+$$
+P(r_i) = \frac{e^{\beta T_i}}{\sum_k e^{\beta T_k}},\qquad T_i = \sum_{a \in r_i} t_a,\qquad \beta = -0.1\ \text{s}^{-1}\ \textbf{[VERIFICAR, calibrar]}
+$$
+
+Se resta el mínimo de *T* antes de la exponencial. Un sorteo por auto, con `CreateRng(seed, 7100)`, al aparecer.
+
+**Resultado con la matriz por defecto** (31 min simulados): C2 → C3 93 % este / 7 % oeste (elegidas 231 / 18; probabilidad del modelo 0.934); C4 → C1 87 % / 13 % (213 / 31; 0.868). El reparto no oscila entre minutos. Los tiempos casi no cambian con la congestión: a estos flujos los tramos del anillo están lejos de su capacidad, y el reparto lo deciden sobre todo los semáforos y los giros (ver [16](#16-estado-pendientes-y-limitaciones)).
+
+**Dos carriles de anticipación:** cada auto conoce su carril actual, el siguiente (`NextLane`) y el subsiguiente (`NextNextLane`), que ahora salen de su ruta. Es necesario porque los carriles de llegada a una intersección miden solo 1–3 m: con un solo paso de anticipación, el auto sabría qué giro hará cuando ya está en la línea, demasiado tarde para frenar.
 
 ---
 
@@ -450,7 +535,7 @@ El ruteo es estocástico pero determinista: usa un generador con semilla propio 
 
   | Offset | Consumidor |
   |---|---|
-  | 0 | Ruteo |
+  | 0 | Ruteo por pesos (sin uso desde E2) |
   | 1, 2, … | Spawners (cada uno distinto) |
   | 1000 | Retardo de arranque en verde |
   | 2000 | Adelantamiento (T4) |
@@ -458,6 +543,10 @@ El ruteo es estocástico pero determinista: usa un generador con semilla propio 
   | 3100, … | Eventos de peatones (cada uno distinto) |
   | 4000 | Colores de carrocería |
   | 5000 | Decoración de la ciudad (en el Editor, semilla fija 20261104) |
+  | 5100 | Autos estacionados (en el Editor, semilla fija 20261109) |
+  | 6000 | Audio: fases de inicio de los bucles |
+  | 7000 | Sorteo de la matriz origen–destino (E2) |
+  | 7100 | Elección de ruta (logit, E3) |
 
   Agregar un spawner no altera la secuencia de los demás.
 - **Orden estable:** los carriles, spawners, intersecciones y controladores se recorren ordenados por nombre; los autos, en orden de Id.
@@ -637,6 +726,17 @@ $$
 
 Aquí *d*o es la distancia del frente del otro auto al inicio de la zona, siguiendo su ruta (incluye autos que aún no eligieron conector pero vienen hacia el carril de llegada correspondiente; criterio conservador). Si *v*o < 0.5 m/s, cuenta como detenido: *t*o = ∞, o 0 si ya está encima del punto.
 
+**Desde E3 (2026-11-25), con frenado anticipado** (`TrafficRules.AnticipatedTimeToReach`). El otro auto no llega a su velocidad actual: frena con su desaceleración cómoda *b*o hasta la velocidad del conector, *v*c = límite del conector × su factor de velocidad, justo al entrar a él (a *d*c = *d*o − *s*zona), y recorre el resto a *v*c:
+
+$$
+t_o = \frac{d_c - d_b}{v_o} + \frac{2\,d_b}{v_o + v_c} + \frac{d_o - d_c}{v_c},\qquad d_b = \frac{v_o^2 - v_c^2}{2\,b_o}
+$$
+
+Si ya no alcanza a frenar cómodo (*d*c < *d*b), llega al conector a *v*c con desaceleración constante; si va más lento que *v*c, *t*o = *d*o / *v*o. Nunca es menor que la fórmula anterior.
+
+- **Por qué:** en E2 el giro a la izquierda hacia C3 (de oeste a norte en I_NC) cedía de más a los autos que doblan a la derecha desde el este. Un auto a 10 m/s, 23 m antes de un giro de 13 km/h, parecía llegar en 2.4 s y llegaba en ~4 s. Con 150 veh/h doblando a la izquierda hubo 10 `traffic_deadlock` en 19 min.
+- **Resultado:** con la misma matriz, 0 `traffic_deadlock` en 19 min y espera máxima observada de 9.3 s. No hizo falta el criterio de inserción para convergencias que proponía el plan.
+
 El auto entra si, para todos:
 
 $$
@@ -753,6 +853,8 @@ Se deriva de la red de tráfico. Cada carril que no es conector da un tramo de b
 - **Sentido interior del anillo:** queda junto a la solera de la berma, a 3.45 m del eje del carril.
 - **Ciclovía exterior:** sin cambios (3.0 m del eje, 1.2 m de la solera).
 
+**Desde el 2026-11-25 (E1), sin las calles x = 60 y x = 4 interior:** 37 tramos (13 por ciclovía, 24 junto a la solera), 22 giros y cruces, 6 líneas de detención y 16 cruces bici–giro de autos. Mayor desajuste: 0.06 m. En la berma interior el camino esquiva 20 autos estacionados.
+
 ### 12.2 Seguimiento del ciclista (`RiderRoute`)
 
 El ciclista elige su camino; `RiderRoute` identifica en qué tramo va.
@@ -802,7 +904,7 @@ Los autos nunca se desplazaban lateralmente.
   | Berma interior del anillo (desde A2) | ~2.25 m por geometría [VERIFICAR con `OvertakeMonitor`] |
   | Calle x = 4 | ~2.0 m |
   | Calle x = −60 | ~2.3 m |
-  | Calle x = 60 | ~2.5 m |
+  | Calle x = 60 (quitada en E1) | ~2.5 m |
 
 - **Bici dentro del carril:** el auto la seguía y no la adelantaba nunca.
 
@@ -1220,8 +1322,13 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 
 | Evento | Detalle |
 |---|---|
-| `traffic_start` | seed, flow_multiplier, target_vehicles, lanes, spawners, intersections, vehicles_after_warmup |
-| `traffic_level` (cada 30 s) | vehicles, target, exit_share, flow_multiplier |
+| `traffic_start` | seed, od_source, od_total_vph, lanes, spawners, intersections, vehicles_after_warmup, warmup_s (hasta E2: flow_multiplier y target_vehicles en vez de od_*) |
+| `od_matrix` (uno por par, al iniciar) | from, to, mean_vph, sd_vph, sampled_vph, source. También en `_meta.txt` (`od_C2_C3=mean=...;sd=...;sampled=...`) |
+| `od_flow` (cada 60 s, uno por par) | from, to, sampled_vph, generated, generated_vph, arrived, origin_pending, origin_dropped, elapsed_s. Cuenta desde el fin del precalentamiento |
+| `od_error` | source: la matriz no se pudo leer o no calza con los nodos; no se genera tráfico |
+| `route_choice` (por auto, si el par tiene más de una ruta) | pair, vehicle_type, chosen, route, times_s (tiempo de cada ruta), probs |
+| `route_share` (cada 60 s, por par con más de una ruta) | pair, routes, time_s, prob, chosen_total, share_total, chosen_last, free_time_s |
+| `traffic_level` (cada 30 s, hasta el 2026-11-25) | vehicles, target, exit_share, flow_multiplier. Lo publicaba `RingExitController`, que se quitó en E1 |
 | `signal_phase` | approach, phase, time_to_change_s, cycle_s, t_signal_s, reason (start/change) |
 | `traffic_deadlock` | lane, next, waited_s, reason, waiting_vehicles, resolution |
 | `cyclist_wait_start` / `_end` | intersection, approach, phase, time_in_phase_s, time_to_change_s, speed_mps, dist_to_line_m, stopped_before, wait_s |
@@ -1265,20 +1372,37 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 - **Semáforo peatonal simple.** Usa lentes de color, sin el pictograma del peatón.
 - **Pasada cercana a la vista.** El peatón aparece unos 10 s antes del encuentro (~13 m más allá del punto del evento) y podría verse aparecer si la vista está despejada.
 - **Rendimiento con peatones.** Con 60 autos y 47 peatones, el Editor marca 12.1 ms por frame (6.0 ms del hilo principal), sobre el objetivo de 11.1 ms. Hay que medirlo en el visor.
-- **Herramientas que dependen de otras.** `RingExitController` encuentra sus carriles por nombre. Orden al cambiar la geometría:
-  1. `Align Lanes To Curb`, que incluye `Smooth Lanes`.
-  2. `Fit Intersections To Curbs`, o `Generate Intersection Lanes`.
-  3. `Generate Cyclist Network`.
-  4. `Analyze Lane Room`.
-  5. `Build Ring Bike Lane`, que regenera la red del ciclista, y `Decorate City`, que termina con `Build Pedestrian Setup`.
-  6. `Build Pedestrian Setup`, que rehace los pasos y el NavMesh y conserva la densidad elegida.
+- **Herramientas que dependen de otras.** Orden al cambiar la geometría (actualizado en E1):
+  1. `Build Pedestrian Setup`, si cambiaron las veredas: `Fit Intersections To Curbs` mide las soleras en el NavMesh de peatones, y con uno viejo mide las esquinas que ya no están.
+  2. `Align Lanes To Curb`, que incluye `Smooth Lanes`.
+  3. `Fit Intersections To Curbs`, o `Generate Intersection Lanes`.
+  4. `Generate Cyclist Network`.
+  5. `Analyze Lane Room`.
+  6. `Build Ring Bike Lane`, que regenera la red del ciclista, y `Decorate City`, que termina con `Build Pedestrian Setup`.
+  7. `Place Parked Cars`, que también regenera la red del ciclista.
+  8. `Validate Network` (`NetworkValidator.cs`): nombres únicos, conexiones válidas, carriles sin entrada o sin salida fuera de los nodos y rutas por par origen–destino. No cambia nada.
+- **Las herramientas solo miden el suelo (desde el 2026-11-25).** Las que buscan la solera con rayos verticales (`Align Lanes To Curb`, `Generate Cyclist Network`, `Analyze Lane Room`, `Build Ring Bike Lane`, `Decorate City`, `Build Pedestrian Setup`, `Place Parked Cars`) tomaban el primer collider que tocaba el rayo. Desde que existen los autos estacionados (2026-11-09), un auto estacionado se leía como la solera: en E1, `Align Lanes To Curb` corrió 2–2.3 m los tres carriles interiores con autos estacionados a su derecha. Se detectó y se corrigió antes de seguir: ahora todos los rayos usan solo la capa `Ground`. Las herramientas no se habían corrido entre el 2026-11-09 y E1, salvo `Place Parked Cars` sobre la red del ciclista.
+- **Capacidad del PARE de C2.** En la prueba de E1 (9 min simulados) hubo un `traffic_deadlock`: un giro a la izquierda desde C2 esperó 20 s una brecha en el anillo y entró por la regla de antibloqueo. **Medida en E2:** con 460 veh/h saliendo de C2 (casi todos doblando a la derecha), 0 llegadas descartadas, cola virtual vacía y como máximo 7 autos en el acceso. Alcanza.
+- **Capacidad de las entradas (medida y calibrada el 2026-11-25).** Con 700 veh/h pedidos en C2 y 650 en C4 entraban ~650 y ~490 veh/h, y alargar las entradas no lo cambió. Se encontraron cuatro causas y se corrigieron:
+  1. **No quedar sobre un paso peatonal (`paso_libre`):** un auto se detenía antes del paso si el de adelante iba a menos de 1.5 m/s, aunque estuviera arrancando. En cada verde cada auto se detenía en la línea. Ahora solo si el de adelante además no acelera (> 0.3 m/s²).
+  2. **Espacio a la salida con un paso peatonal (`bloqueo`):** se exigía el espacio ya libre detrás del paso. Ahora alcanza si el de adelante va a más de 2 m/s y, aunque frene cómodo o se detenga detrás de su líder, va a dejar ese espacio.
+  3. **IDM:** *T* de 1.3 a 1.0 s ([5.2](#52-heterogeneidad-de-conductores-driverprofile)).
+  4. **PARE:** la detención cuenta bajo 1.0 m/s a menos de 3 m de la línea (antes < 0.3 m/s; el auto se arrastraba ~1 s más).
+  - **Resultado:** C4 descarga cada 1.6–2.3 s en verde (antes 3.0–3.6 s; ~600–720 veh/h con 650 pedidos). El PARE de C2 deja salir un auto cada 4.1–4.5 s (antes 5.8 s; ~830 veh/h). Con la matriz por defecto, cero autos esperando fuera en las dos entradas (antes hasta 27 en C4).
+  - **Queda:** el PARE sigue ~1 s más lento que el tiempo de seguimiento del HCM (3.3 s para un giro a la derecha desde un PARE **[VERIFICAR]**). El resto es el avance de la cola con *a* = 1.5 m/s², que no se cambió porque afecta todo el tráfico. Un verde también baja cuando un auto que dobla a la derecha espera a los peatones del cruce paralelo (un solo carril): es real.
+- **Capacidad del PARE de C2 (medida en E3).** Con 900 veh/h pedidos de C2 a C3 entraron ~620 veh/h; 30 autos quedaron en la cola virtual y se descartaron 37 llegadas en 13 min. Ver el punto anterior.
+- **El reparto de rutas casi no depende de la congestión.** Con estos flujos el anillo está lejos de su capacidad (1 800 veh/h por carril) y el cuello de botella real, el PARE de C2, es común a las dos rutas de C2 → C3. El reparto (93/7) lo fijan los semáforos y los giros de la ruta oeste y β. Con 900 veh/h de C2 a C3 el reparto no se movió. **[DECISIÓN pendiente]** si el experimento necesita más autos por la curva oeste.
 - **Tiempo del Editor.** Al entrar en Play, el precalentamiento bloquea el hilo principal unos segundos.
 
 ---
 
 ## 17. Validación
 
-### 17.1 Tests automáticos (EditMode): 53 de 53 pasan
+### 17.1 Tests automáticos (EditMode): 100 de 100 pasan (2026-11-25, E3)
+
+Desde E3: tiempo de llegada con frenado anticipado (`TrafficRulesTests`); BPR, logit (fórmula del dibujo, estabilidad), capacidad HCM, demora de semáforo y selección de rutas (`RouteChoiceModelTests`); catálogo de rutas sin repetir intersección y con el filtro del bus (`VehicleMixTests`, en lugar del test de `RoutePlanner`).
+
+Desde el 2026-11-13 hay además tests de la bici (filtro 1€ y paquetes del Arduino, `BikeSignalTests`; respuesta de dirección, `SteeringResponseTests`) y, desde E2, de la matriz origen–destino (`OdMatrixTests`: lectura, validación de pares, media y sd del sorteo con N = 20 000, nunca negativa, misma semilla → misma matriz, reparto de destinos) y de la ruta más rápida (`RoutePlanner`, en `VehicleMixTests`, que reemplaza al test de la elección por pesos). La tabla siguiente es la de T2–T6:
 
 | Grupo | Tests |
 |---|---|
@@ -1411,6 +1535,7 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | 2026-11-04 | Bus | Circula como tráfico normal, sin paraderos |
 | 2026-11-04 | Ambientación | Aprobada la lista de la hoja de referencia: PARE, placas, paraderos, baldosa, soleras amarillas, árboles con alcorque y tronco encalado, grifos, basureros, cordillera y bruma. Sin quioscos ni cables aéreos; se mantiene el modelo de los árboles |
 | 2026-11-09 | Ambientación | Sin solera amarilla. Árboles solo con un cuadrado de tierra (el tronco atravesaba el encalado). Tachones más grandes. Colisión para el mobiliario nuevo y los postes de semáforo |
+| 2026-11-11 | Audio | Espacialización Meta XR, ambiente «Downtown LA» (Freesound, CC0), autos con motor grabado y neumático procedural, bus eléctrico procedural; bici sin sonido |
 | 2026-11-09 | Autos estacionados | Algunos, en grupos, en la berma interior frente a edificios; el ciclista va por la calle junto a ellos |
 | 2026-11-09 | Bus | Más frecuente, con un máximo de 2 a la vez |
 | 2026-11-09 | Peatones | Repartirlos mejor: puntos uniformes sobre la vereda y menos destinos que obligan a cruzar |
@@ -1431,7 +1556,17 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 | `scripts/traffic/TrafficManager.cs` | Motor del tráfico |
 | `scripts/traffic/TrafficRules.cs` | Reglas puras de T3 |
 | `scripts/traffic/BikeConflictZone.cs` | Cruces giro–bici |
-| `scripts/traffic/RingExitController.cs` | Regulación de la salida |
+| `scripts/traffic/OdNode.cs` | Nodo origen o destino (C1–C4), desde E1. `RingExitController.cs` (regulación de la salida) se borró en E1 |
+| `scripts/traffic/OdMatrix.cs` | Matriz origen–destino: lectura, validación, sorteo normal por celda y reparto de destinos (E2) |
+| `scripts/traffic/OdDemand.cs` | Carga la matriz, la sortea, configura los spawners y publica `od_matrix` y `od_flow` (E2) |
+| `scripts/traffic/RouteChoice.cs` | Elección de ruta de cada auto: catálogo, flujo por tramo, BPR, logit, `route_choice` y `route_share` (E3). Reemplaza a `RoutePlanner.cs` (E2, borrado) |
+| `scripts/traffic/RouteChoiceModel.cs` | Matemática pura de la elección: BPR, logit, capacidad HCM, demora de semáforo, enumeración y selección de rutas (E3) |
+| `AssetsLab/Config/od_matriz_base.json` | Matriz origen–destino por defecto |
+| `scripts/Editor/StreetRemoverEditor.cs` | `SimBici > Remove Streets`: quita las calles x = 60 y x = 4 interior y deja la red en T (E1) |
+| `scripts/Editor/EntryExtenderEditor.cs` | `SimBici > Extend Entries`: alarga 120 m las calles de entrada C2 y C4 |
+| `AssetsLab/Generated/E3_Calzada_C2.asset`, `E3_Calzada_C4.asset` | Calzada de las entradas alargadas |
+| `scripts/Editor/NetworkValidator.cs` | `SimBici > Validate Network`: revisa la red y lista las rutas por par origen–destino |
+| `AssetsLab/Generated/E1_Calle_RicardoLyon.asset` | Calzada de x = 4 recortada en el anillo |
 | `scripts/traffic/OvertakeRules.cs` | Reglas puras de T4 (lognormal, quíntico, distancias, TTC) |
 | `scripts/experiment/OvertakeMonitor.cs` | Medición de cada pasada (`overtake_pass`) |
 | `scripts/Editor/LaneRoomAnalyzer.cs` | Espacio lateral: solera izquierda y carril contrario |
@@ -1611,6 +1746,12 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
   - 53 de 53 tests.
 - **Git:** se quitaron del repositorio y del historial los paquetes de la Asset Store (Versatile, Traffic Lights System, ARCADE, Understone) y los prefabs que dependían de ellos (`CarTest`, `Interseccion`). Siguen en el disco local.
 
+### 2026-11-11: sonido
+
+- Ambiente de ciudad, autos y bus eléctrico con audio 3D (Meta XR Audio) y Doppler ([5.4](#54-sonido-desde-el-2026-11-11)). La bici, sin sonido.
+- **Grabaciones CC0 de Freesound:** ambiente de janbezouska y motor de Nox_Sound. El neumático y el bus se generan por código.
+- **Prueba en Play:** 10 voces asignadas a los vehículos cercanos, el bus con sus tres capas, sin errores nuevos y 10.2 ms por frame. Los niveles quedan por calibrar en el visor.
+
 ### 2026-11-09: autos estacionados en la berma
 
 - **Herramienta:** `SimBici > Place Parked Cars` (`ParkedCarsEditor.cs`, semilla `CreateRng(20261109, 5100)`).
@@ -1640,6 +1781,38 @@ con *D*p = 0.5, 1.0 o 2.0 m (zonas proxémicas) y *r*p = 0.25 m. Mientras está 
 - **Árboles:** cuadrado de tierra de 1 m en vez del tronco encalado y el alcorque.
 - **Colisión:** mobiliario nuevo (61 piezas) y postes de semáforo en la capa `StaticObstacle` ([4.4](#44-ambientación-de-santiago-a2)).
 - **Peatones:** puntos uniformes sobre la vereda y filtro de destinos que cruzan ([14.4](#144-peatones-ambientales-pedestrianmanager)).
+
+### 2026-11-25: cambios al mapa para el experimento de rutas (E1)
+
+- **Mapa:** se quitaron la calle x = 60 y el tramo de x = 4 dentro del circuito, que quedó como una manzana con tres edificios; I_SC e I_NC quedaron en T; nodos C1–C4 ([4.1](#41-topología)).
+- **Regulación de la salida:** se borró `RingExitController` ([6.4](#64-regulación-de-la-salida-quitada)).
+- **Herramientas:** las que miden la solera ahora solo ven la capa `Ground`; antes leían a los autos estacionados como solera ([16](#16-estado-pendientes-y-limitaciones)). `Build Pedestrian Setup` ya no cuenta las veredas apagadas.
+- **Regenerado:** carriles, intersecciones, red del ciclista, espacio lateral, ciclovía del anillo, decoración (42 veredas, 72 árboles, 16 placas en 8 postes, 57 colisiones), peatones (NavMesh de 755 triángulos sobre 2 075 m de vereda, 166 peatones con 8 por 100 m) y autos estacionados (20 en 8 grupos).
+- **Rutas a flujo libre** (`Validate Network`): C2 → C3 por la curva este 542 m / 44.1 s, por la oeste 552 m / 47.0 s; C4 → C1 directo 256 m / 18.4 s, por la curva oeste 423 m / 37.7 s; C2 → C1 y C4 → C3, 215 m / 22–23 s (la alternativa tarda 2.5 veces más).
+- **Validación** (9 min simulados con el ruteo por pesos, ×3): 0 autos superpuestos (separación mínima 1.25 m), 30 autos (el tope) y nunca más de 2 buses; un `traffic_deadlock` en el PARE de C2.
+
+### 2026-11-25: demanda por matriz origen–destino (E2)
+
+- **Demanda:** la matriz origen–destino reemplaza al nivel de tráfico; cada auto nace con su destino y sigue la ruta más rápida ([6.3](#63-matriz-origendestino-desde-el-2026-11-25-e2), [7](#7-ruteo)). Se quitaron `Flow Multiplier`, `vehiclesPerLevel`, el tope de autos, el refuerzo ×3 del precalentamiento y la elección de giro por pesos (`TrafficLane.PickNext`).
+- **Cola virtual** de los spawners de 5 a 30 llegadas.
+- **Corrección en las convergencias:** `TailInZone` contaba la cola de cualquier auto en el carril de salida, incluso la de uno que venía del mismo conector; ahora solo la de los que salen del conector en conflicto.
+- **Validación** (31 min simulados, semilla 12345, matriz sorteada C2 → C3 449, C2 → C1 11, C4 → C1 541, C4 → C3 9 veh/h): C2 → C3 generó 471 veh/h (+4.9 %); C4 → C1 500 veh/h (−7.6 %) con 14 llegadas en la cola virtual y 0 descartadas; los pares de 10 veh/h tuvieron 3–12 autos. 0 autos superpuestos, 0 `traffic_deadlock`. Hallazgos: el acceso C4 está cerca de su capacidad y el giro a la izquierda hacia C3 cede de más ([16](#16-estado-pendientes-y-limitaciones)).
+
+### 2026-11-25: elección de ruta con logit y BPR (E3)
+
+- **Aceptación de brecha:** el tiempo de llegada del otro auto cuenta que frena para entrar a su conector ([11.5](#115-aceptación-de-brecha)). Resuelve los bloqueos del giro a la izquierda hacia C3.
+- **Elección de ruta:** catálogo de rutas por par, tiempo por tramo con BPR y demora por control, logit con β = −0.1 ([7](#7-ruteo)). Se borró `RoutePlanner`.
+- **Validación** (31 min simulados, matriz por defecto): reparto observado igual al del modelo (C2 → C3 92.8 % este, C4 → C1 87.3 % directo), sin oscilaciones, 0 superpuestos, 0 `traffic_deadlock`. Con 900 veh/h de C2 a C3 el PARE de C2 deja pasar ~620 veh/h y el reparto no cambia. En la corrida base, el acceso C4 acumuló hasta 27 autos en la cola virtual y descartó 3 llegadas (en E2, 14 y 0). Causa probable, sin verificar: el 13 % que ahora va por la curva oeste dobla a la derecha en I_NO y cede a los peatones del paso, lo que frena el único carril del acceso.
+
+### 2026-11-25: entradas alargadas y capacidad medida
+
+- **Entradas C2 y C4 alargadas 120 m** fuera del mapa ([6.2](#62-entradas)). La reaparición tras un choque queda en el mismo lugar.
+- **Capacidad medida** con 700 y 650 veh/h pedidos: C2 ~650 veh/h (5.8 s entre salidas del PARE), C4 ~490 veh/h (3.0–3.6 s entre salidas en verde). Alargar no aumentó la capacidad: el límite es la dinámica de arranque y la detención en el PARE ([16](#16-estado-pendientes-y-limitaciones)). Un `traffic_deadlock` en 23 min con esa demanda alta.
+
+### 2026-11-25: calibración de la salida de cola y del PARE
+
+- **Reglas de los pasos peatonales** (`paso_libre` y espacio a la salida) que detenían la cola de un semáforo en cada auto; *T* del IDM de 1.3 a 1.0 s; detención práctica en el PARE (< 1.0 m/s). Detalle en [16](#16-estado-pendientes-y-limitaciones).
+- **Validación** (31 min simulados, matriz por defecto): cola virtual vacía en C2 y C4 (antes hasta 27 autos en C4), 0 `traffic_deadlock`, 0 superpuestos, 0 choques. Reparto C2 → C3 92 % / 8 %, C4 → C1 89 % / 11 %. Con las entradas alargadas, C4 → C3 tiene ahora dos rutas (la segunda, 2 %): el tiempo extra de la entrada acerca el cociente a 2.0, bajo el factor 2.2. 100 de 100 tests.
 
 ## 21. Referencias
 

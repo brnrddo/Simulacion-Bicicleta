@@ -33,6 +33,22 @@ public class BicycleController : MonoBehaviour
              "offset lateral tiene un error de hasta este valor durante los giros.")]
     [SerializeField] private float rearAxleToRiderM = 0.55f;
 
+    public enum SteeringMode { Kinematic, CurvatureMapped }
+
+    [Header("Respuesta de direccion")]
+    [Tooltip("Kinematic: el angulo del manubrio es el angulo de la rueda (modelo anterior; condicion de " +
+             "referencia). CurvatureMapped: el manubrio manda velocidad de giro con una curva expo, todo el " +
+             "recorrido sirve a cualquier velocidad y nunca es mas sensible que Kinematic (ver SteeringResponse).")]
+    [SerializeField] private SteeringMode steeringMode = SteeringMode.CurvatureMapped;
+
+    [Tooltip("Solo CurvatureMapped. 0 = lineal; mas alto = centro mas suave y extremos mas rapidos. " +
+             "Con 0.3 y techo de 90 grados/s, la curva del anillo pide ~4 grados de manubrio y una esquina ~24.")]
+    [SerializeField, Range(0f, 1f)] private float steeringExpo = 0.3f;
+
+    [Tooltip("Solo CurvatureMapped. Aceleracion maxima de la velocidad de giro (grados/s2). Evita escalones en " +
+             "maniobras bruscas; su costo es retraso. 0 = sin limite. No filtra ruido: eso lo hace BikeSensorProcessor.")]
+    [SerializeField, Min(0f)] private float maxYawAccelDegPerSec2 = 300f;
+
     [Header("Limites de direccion")]
     [SerializeField, Range(5f, 80f)] private float maxSteeringAngleDeg = 45f;
 
@@ -51,8 +67,9 @@ public class BicycleController : MonoBehaviour
     [SerializeField] private float lowSpeedThresholdMps = 0.5f;
 
     [Header("Suavizado de la dinamica")]
-    [Tooltip("Suavizado del angulo de direccion USADO POR LA DINAMICA. " +
-             "No afecta al manubrio visual, que copia el fisico.")]
+    [Tooltip("Solo Kinematic. Suavizado del angulo de direccion USADO POR LA DINAMICA. " +
+             "No afecta al manubrio visual, que copia el fisico. En CurvatureMapped no se usa: " +
+             "sumado al filtro del sensor y al limite de aceleracion de giro serian tres suavizados en serie.")]
     [SerializeField, Range(0f, 0.3f)] private float steeringSmoothTime = 0.05f;
 
     [Tooltip("Suavizado extra de velocidad. Dejar en 0 con bici real: BikeSensorProcessor " +
@@ -88,6 +105,11 @@ public class BicycleController : MonoBehaviour
     /// <summary>Velocidad de guinada aplicada este tick, grados/s.</summary>
     public float YawRateDegPerSec { get; private set; }
 
+    /// <summary>Cambio de la velocidad de guinada en este tick, grados/s2.</summary>
+    public float YawAccelDegPerSec2 { get; private set; }
+
+    public SteeringMode ActiveSteeringMode => steeringMode;
+
     /// <summary>Inclinacion implicada por el giro, grados (positivo = derecha). Solo visual.</summary>
     public float LeanAngleDeg { get; private set; }
 
@@ -117,6 +139,7 @@ public class BicycleController : MonoBehaviour
     private float headingDeg;
     private float smoothedSpeed, speedVelocityRef;
     private float steeringVelocityRef;
+    private float yawRateRad;   // velocidad de giro aplicada (se guarda para limitar su aceleracion)
     private float groundYVelocityRef;
     private bool wasUsingRealBike;
 
@@ -130,6 +153,19 @@ public class BicycleController : MonoBehaviour
         if (groundLayerMask == 0)
             Debug.LogWarning("[BicycleController] groundLayerMask sin asignar: " +
                              "el seguimiento de terreno esta desactivado.");
+
+        // Los parametros de la direccion son parte del metodo: quedan en el log de cada sesion
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        ExperimentLogger.RegisterContinuousColumns("steer_mode,yaw_accel_dps2", sb =>
+            sb.Append(steeringMode.ToString()).Append(',').Append(YawAccelDegPerSec2.ToString("F1", inv)));
+        ExperimentLogger.RegisterMeta("steering_mode", steeringMode.ToString());
+        ExperimentLogger.RegisterMeta("steering_expo", steeringExpo.ToString("F3", inv));
+        ExperimentLogger.RegisterMeta("max_yaw_accel_dps2", maxYawAccelDegPerSec2.ToString("F1", inv));
+        ExperimentLogger.RegisterMeta("comfort_max_yaw_rate_dps", comfortMaxYawRateDegPerSec.ToString("F1", inv));
+        ExperimentLogger.RegisterMeta("max_lean_deg", maxLeanAngleDeg.ToString("F1", inv));
+        ExperimentLogger.RegisterMeta("max_steering_deg", maxSteeringAngleDeg.ToString("F1", inv));
+        ExperimentLogger.RegisterMeta("wheelbase_m", wheelbase.ToString("F3", inv));
+        ExperimentLogger.RegisterMeta("controller_steering_smooth_s", steeringSmoothTime.ToString("F3", inv));
     }
 
     private void FixedUpdate()
@@ -203,6 +239,8 @@ public class BicycleController : MonoBehaviour
         CurrentSpeedMps = 0f;
         EffectiveSteeringDeg = 0f;
         YawRateDegPerSec = 0f;
+        YawAccelDegPerSec2 = 0f;
+        yawRateRad = 0f;
         LeanAngleDeg = 0f;
     }
 
@@ -253,13 +291,37 @@ public class BicycleController : MonoBehaviour
 
         CurrentSpeedMps = smoothedSpeed;
 
-        float maxSteerNow = ComputeDynamicSteeringLimitDeg(smoothedSpeed);
-        float clampedTarget = Mathf.Clamp(PhysicalSteeringDeg, -maxSteerNow, maxSteerNow);
+        float previousYawRateRad = yawRateRad;
 
-        EffectiveSteeringDeg = steeringSmoothTime > 0f
-            ? Mathf.SmoothDamp(EffectiveSteeringDeg, clampedTarget, ref steeringVelocityRef,
-                               steeringSmoothTime, Mathf.Infinity, dt)
-            : clampedTarget;
+        if (steeringMode == SteeringMode.CurvatureMapped)
+        {
+            float target = SteeringResponse.CurvatureMappedYawRateRad(
+                PhysicalSteeringDeg, smoothedSpeed, maxSteeringAngleDeg, steeringExpo, wheelbase,
+                maxLeanAngleDeg, comfortMaxYawRateDegPerSec, Mathf.Abs(Physics.gravity.y));
+            yawRateRad = SteeringResponse.LimitYawRateRad(yawRateRad, target, maxYawAccelDegPerSec2, dt,
+                                                         smoothedSpeed, maxSteeringAngleDeg, wheelbase);
+
+            // Angulo de rueda equivalente a lo que realmente gira la bici (para el log y la comparacion con Kinematic)
+            EffectiveSteeringDeg = smoothedSpeed > 1e-3f
+                ? Mathf.Atan(yawRateRad * wheelbase / smoothedSpeed) * Mathf.Rad2Deg
+                : 0f;
+        }
+        else
+        {
+            float maxSteerNow = ComputeDynamicSteeringLimitDeg(smoothedSpeed);
+            float clampedTarget = Mathf.Clamp(PhysicalSteeringDeg, -maxSteerNow, maxSteerNow);
+
+            EffectiveSteeringDeg = steeringSmoothTime > 0f
+                ? Mathf.SmoothDamp(EffectiveSteeringDeg, clampedTarget, ref steeringVelocityRef,
+                                   steeringSmoothTime, Mathf.Infinity, dt)
+                : clampedTarget;
+
+            // Sin clamp redundante sobre omega: ComputeDynamicSteeringLimitDeg ya garantiza
+            // |omega| <= omega_max por construccion.
+            yawRateRad = smoothedSpeed * Mathf.Tan(EffectiveSteeringDeg * Mathf.Deg2Rad) / Mathf.Max(wheelbase, 0.01f);
+        }
+
+        YawAccelDegPerSec2 = (yawRateRad - previousYawRateRad) * Mathf.Rad2Deg / dt;
     }
 
     /// <summary>
@@ -286,11 +348,8 @@ public class BicycleController : MonoBehaviour
     private void MoveBicycle(float dt)
     {
         // Modelo cinematico de bicicleta, referencia = eje trasero.
-        // Sin clamp redundante sobre omega: ComputeDynamicSteeringLimitDeg ya
-        // garantiza |omega| <= omega_max por construccion. Tener los dos limites
-        // hacia imposible saber cual estaba actuando al ajustar el tuning.
-        float steeringRad = EffectiveSteeringDeg * Mathf.Deg2Rad;
-        float omegaRad = (smoothedSpeed * Mathf.Tan(steeringRad)) / Mathf.Max(wheelbase, 0.01f);
+        // La velocidad de giro ya viene calculada por UpdateDynamicsInputs segun el modo de direccion.
+        float omegaRad = yawRateRad;
 
         YawRateDegPerSec = omegaRad * Mathf.Rad2Deg;
 

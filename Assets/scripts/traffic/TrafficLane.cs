@@ -2,9 +2,9 @@
 // TrafficLane.cs
 // Un carril = un spline dibujado EN EL SENTIDO DE CIRCULACION.
 // Los carriles se conectan entre si (nextLanes) formando la red:
-// al llegar al final de un carril, el auto elige el siguiente segun
-// los pesos. Los tramos dentro de una interseccion tambien son
-// carriles (cortos), lo que permite modelar giros mas adelante.
+// al llegar al final de un carril, el auto pasa al siguiente de su
+// ruta (TrafficManager). Los tramos dentro de una interseccion tambien
+// son carriles (cortos), lo que permite modelar giros.
 // Va en un GameObject con SplineContainer.
 // ============================================================
 
@@ -18,7 +18,7 @@ using UnityEngine.Splines;
 public class LaneConnection
 {
     public TrafficLane lane;
-    [Tooltip("Peso relativo para elegir este destino (p. ej. 70 derecho, 30 giro).")]
+    [Tooltip("Peso relativo del giro. Desde E2 los autos siguen su ruta al destino y no usan este peso; lo escribe IntersectionLaneBuilder.")]
     [Min(0f)] public float weight = 1f;
 }
 
@@ -144,53 +144,6 @@ public class TrafficLane : MonoBehaviour
         Vector3 delta = worldPoint - container.transform.TransformPoint((Vector3)nearestLocal);
         delta.y = 0f;
         lateralM = Vector3.Dot(delta, right);
-    }
-
-    /// <summary>Cambia en runtime el peso de una conexion (lo usa RingExitController). False si no existe.</summary>
-    public bool SetWeight(TrafficLane target, float weight)
-    {
-        foreach (var c in nextLanes)
-            if (c.lane == target) { c.weight = Mathf.Max(0f, weight); return true; }
-        return false;
-    }
-
-    /// <summary>Elige el siguiente carril segun los pesos. null = fin de la red.</summary>
-    public TrafficLane PickNext(System.Random rng)
-    {
-        float total = 0f;
-        foreach (var c in nextLanes) if (c.lane != null) total += c.weight;
-        if (total <= 0f) return null;
-
-        double r = rng.NextDouble() * total;
-        foreach (var c in nextLanes)
-        {
-            if (c.lane == null) continue;
-            r -= c.weight;
-            if (r <= 0) return c.lane;
-        }
-        return nextLanes[nextLanes.Count - 1].lane;
-    }
-
-    /// <summary>
-    /// Como PickNext, pero solo entre los destinos permitidos (p. ej. conectores donde cabe un vehiculo largo).
-    /// Consume un solo numero del RNG igual que PickNext (determinismo). Si ninguno esta permitido, elige entre todos.
-    /// </summary>
-    public TrafficLane PickNext(System.Random rng, Predicate<TrafficLane> allowed)
-    {
-        float total = 0f;
-        foreach (var c in nextLanes) if (c.lane != null && allowed(c.lane)) total += c.weight;
-        if (total <= 0f) return PickNext(rng);
-
-        double r = rng.NextDouble() * total;
-        TrafficLane last = null;
-        foreach (var c in nextLanes)
-        {
-            if (c.lane == null || !allowed(c.lane)) continue;
-            last = c.lane;
-            r -= c.weight;
-            if (r <= 0) return c.lane;
-        }
-        return last;
     }
 
     // ------------------------------------------------------------

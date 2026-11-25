@@ -52,10 +52,27 @@ public class BikeSensorProcessor : MonoBehaviour, IBikeInputSource
              "se va del carril sin tocar el manubrio.")]
     [SerializeField, Range(0, 30)] private int potCenterDeadbandRaw = 4;
 
-    [Tooltip("Suavizado del angulo de direccion (dither del ADC). Mantener bajo: " +
+    public enum SteeringFilterMode { SmoothDamp, OneEuro }
+
+    [Tooltip("OneEuro: filtra fuerte con el manubrio quieto y casi nada al girar rapido. " +
+             "SmoothDamp: el suavizado fijo anterior (condicion de referencia).")]
+    [SerializeField] private SteeringFilterMode steeringFilter = SteeringFilterMode.OneEuro;
+
+    [Tooltip("Solo SmoothDamp. Suavizado del angulo de direccion (dither del ADC). Mantener bajo: " +
              "esto es acondicionamiento de senal, no comfort. El comfort se ajusta " +
              "en BicycleController.")]
     [SerializeField, Range(0f, 0.15f)] private float steeringSmoothTime = 0.02f;
+
+    [Tooltip("Solo OneEuro. Corte con el manubrio quieto (Hz). Ajustar primero, con beta = 0: " +
+             "bajarlo hasta que la vista no tiemble con el manubrio quieto.")]
+    [SerializeField, Range(0.1f, 10f)] private float oneEuroMinCutoffHz = 2f;
+
+    [Tooltip("Solo OneEuro. Cuanto sube el corte por cada grado/s de giro del manubrio. " +
+             "Ajustar despues: subirlo hasta que no se note retraso al girar rapido.")]
+    [SerializeField, Range(0f, 1f)] private float oneEuroBeta = 0.1f;
+
+    [Tooltip("Solo OneEuro. Corte del pasa-bajos de la derivada (Hz).")]
+    [SerializeField, Range(0.1f, 10f)] private float oneEuroDCutoffHz = 1f;
 
     // ------------------------------------------------------------
     [Header("Rechazo de outliers (potenciometro)")]
@@ -74,6 +91,16 @@ public class BikeSensorProcessor : MonoBehaviour, IBikeInputSource
              "Sin esto, si el potenciometro salta y se QUEDA en el valor nuevo (montaje " +
              "corrido), el manubrio queda congelado el resto de la sesion.")]
     [SerializeField, Range(2, 30)] private int outlierAcceptAfterSamples = 8;
+
+    // ------------------------------------------------------------
+    [Header("Rechazo de paquetes imposibles (velocidad)")]
+    [Tooltip("Un paquete que implique mas que esto se descarta entero (linea serial corrupta o " +
+             "reinicio del Arduino). 25 m/s = 90 km/h.")]
+    [SerializeField, Min(5f)] private float maxPlausibleSpeedMps = 25f;
+
+    [Tooltip("Paquetes nuevos rechazados seguidos tras los cuales se resincroniza con el Arduino " +
+             "(caso tipico: el Arduino se reinicio y sus contadores volvieron a cero).")]
+    [SerializeField, Range(2, 90)] private int resyncAfterRejectedPackets = 10;
 
     // ------------------------------------------------------------
     [Header("Filtro Alpha-Beta (velocidad)")]
@@ -144,6 +171,12 @@ public class BikeSensorProcessor : MonoBehaviour, IBikeInputSource
     /// <summary>Contador acumulado de muestras de potenciometro descartadas. Loguear por trial.</summary>
     public int RejectedPotSamples { get; private set; }
 
+    /// <summary>Angulo del manubrio antes del filtro (despues de calibracion y zona muerta), grados.</summary>
+    public float SteeringRawDeg { get; private set; }
+
+    /// <summary>Paquetes descartados enteros por imposibles (ver PulsePacketCheck).</summary>
+    public int RejectedPackets { get; private set; }
+
     public bool IsReceivingData =>
         serialInput != null && serialInput.IsConnected &&
         (Time.time - lastDataReceivedTime) < dataStaleTimeoutSec;
@@ -161,8 +194,14 @@ public class BikeSensorProcessor : MonoBehaviour, IBikeInputSource
     private int lastSeenReadSequence = -1;
 
     private float steeringVelocityRef;
+    private readonly OneEuroFilter steeringOneEuro = new OneEuroFilter();
     private int lastAcceptedPotRaw = -1;
     private int consecutiveOutliers;
+
+    private bool hasPreviousPacket;
+    private uint lastPacketNowUs;
+    private bool lastPacketRejected;
+    private int consecutiveRejectedPackets;
 
     private float lastReadoutTime;
     private float lastRejectionWarnTime = -999f;
@@ -193,6 +232,33 @@ public class BikeSensorProcessor : MonoBehaviour, IBikeInputSource
         potRawCenter = Mathf.Clamp(potRawCenter, potRawMin + 1, potRawMax - 1);
 
         RecomputeDerived();
+
+        // Crudos al CSV continuo: permiten re-derivar velocidad y direccion sin repetir la sesion
+        ExperimentLogger.RegisterContinuousColumns(
+            "steer_raw_deg,pot_raw,pulse_count,pulse_ts_us,speed_meas_mps,sensor_rejects", AppendLogColumns);
+
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        ExperimentLogger.RegisterMeta("magnet_count", magnetCount.ToString(inv));
+        ExperimentLogger.RegisterMeta("wheel_circumference_m", wheelCircumferenceM.ToString("F3", inv));
+        ExperimentLogger.RegisterMeta("pot_deadband_raw", potCenterDeadbandRaw.ToString(inv));
+        ExperimentLogger.RegisterMeta("steering_filter", steeringFilter.ToString());
+        ExperimentLogger.RegisterMeta("one_euro_min_cutoff_hz", oneEuroMinCutoffHz.ToString("F2", inv));
+        ExperimentLogger.RegisterMeta("one_euro_beta", oneEuroBeta.ToString("F3", inv));
+        ExperimentLogger.RegisterMeta("one_euro_d_cutoff_hz", oneEuroDCutoffHz.ToString("F2", inv));
+        ExperimentLogger.RegisterMeta("sensor_steering_smooth_s", steeringSmoothTime.ToString("F3", inv));
+        ExperimentLogger.RegisterMeta("speed_alpha", alpha.ToString("F3", inv));
+        ExperimentLogger.RegisterMeta("speed_beta", beta.ToString("F3", inv));
+    }
+
+    private void AppendLogColumns(System.Text.StringBuilder sb)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        sb.Append(SteeringRawDeg.ToString("F2", inv)).Append(',');
+        sb.Append(RawPotValue.ToString(inv)).Append(',');
+        sb.Append(RawPulseCount.ToString(inv)).Append(',');
+        sb.Append(RawPulseTimestampUs.ToString(inv)).Append(',');
+        sb.Append(LastMeasuredSpeedMps.ToString("F3", inv)).Append(',');
+        sb.Append((RejectedPackets + RejectedPotSamples).ToString(inv));
     }
 
     private void OnValidate() => RecomputeDerived();
@@ -213,7 +279,8 @@ public class BikeSensorProcessor : MonoBehaviour, IBikeInputSource
         // Comparar contra la copia propia del contador en vez de un HasNewData()
         // que consuma el flag: asi el logger puede leer lo mismo sin robar lecturas.
         int seq = serialInput.ReadSequence;
-        if (seq != lastSeenReadSequence)
+        bool isNewPacket = seq != lastSeenReadSequence;
+        if (isNewPacket)
         {
             lastSeenReadSequence = seq;
             lastDataReceivedTime = Time.time;
@@ -221,6 +288,13 @@ public class BikeSensorProcessor : MonoBehaviour, IBikeInputSource
 
         SerialBikeInput.RawSensorData raw = serialInput.GetLatestData();
         if (!raw.isValid) return;
+
+        // Un paquete imposible se descarta entero (contadores y potenciometro): este tick no cambia nada
+        if (!AcceptPacket(raw, isNewPacket))
+        {
+            ReportDiagnostics();
+            return;
+        }
 
         RawPulseCount = raw.pulseCount;
         RawPulseTimestampUs = raw.pulseTimestampUs;
@@ -231,6 +305,60 @@ public class BikeSensorProcessor : MonoBehaviour, IBikeInputSource
         UpdateSpeedEstimate(raw);
 
         ReportDiagnostics();
+    }
+
+    // ------------------------------------------------------------
+    // VALIDACION DEL PAQUETE
+    // ------------------------------------------------------------
+
+    /// <summary>
+    /// False si el paquete es fisicamente imposible respecto del ultimo aceptado (linea serial
+    /// corrupta o Arduino reiniciado). Sin esto, un contador de pulsos que "retrocede" se lee como
+    /// miles de millones de pulsos y la bici salta kilometros en un tick.
+    /// </summary>
+    private bool AcceptPacket(SerialBikeInput.RawSensorData raw, bool isNewPacket)
+    {
+        if (!hasPreviousPacket)
+        {
+            // Primer paquete (o resincronizacion): se toma como referencia, sin medir nada con el
+            hasPreviousPacket = true;
+            lastPacketRejected = false;
+            consecutiveRejectedPackets = 0;
+            lastPacketNowUs = raw.nowUs;
+            lastPulseCount = raw.pulseCount;
+            lastPulseTimestampUs = raw.pulseTimestampUs;
+            return true;
+        }
+
+        // El mismo paquete rechazado, leido otra vez: sigue rechazado y no cuenta de nuevo
+        if (!isNewPacket && lastPacketRejected) return false;
+
+        if (PulsePacketCheck.IsPlausible(lastPulseCount, lastPulseTimestampUs, lastPacketNowUs,
+                                         raw.pulseCount, raw.pulseTimestampUs, raw.nowUs,
+                                         distancePerPulseM, maxPlausibleSpeedMps))
+        {
+            lastPacketNowUs = raw.nowUs;
+            lastPacketRejected = false;
+            consecutiveRejectedPackets = 0;
+            return true;
+        }
+
+        lastPacketRejected = true;
+        RejectedPackets++;
+        consecutiveRejectedPackets++;
+
+        if (consecutiveRejectedPackets >= resyncAfterRejectedPackets)
+        {
+            // No fue una linea suelta: el Arduino se reinicio o estuvo mudo mucho tiempo.
+            // Se parte de cero en vez de seguir con una velocidad que ya no se puede corregir.
+            Debug.LogWarning($"[BikeSensorProcessor] {consecutiveRejectedPackets} paquetes imposibles seguidos: " +
+                             "resincronizando con el Arduino (reinicio del Arduino?).", this);
+            hasPreviousPacket = false;
+            hasReceivedFirstPulse = false;
+            EstimatedSpeedMps = 0f;
+            EstimatedAccelMps2 = 0f;
+        }
+        return false;
     }
 
     // ------------------------------------------------------------
@@ -288,6 +416,17 @@ public class BikeSensorProcessor : MonoBehaviour, IBikeInputSource
     private void UpdateSteering(int potRaw)
     {
         float target = CalculateSteeringDeg(potRaw);
+        SteeringRawDeg = target;
+
+        if (steeringFilter == SteeringFilterMode.OneEuro)
+        {
+            // Se copian en cada tick para poder ajustarlos en Play desde el Inspector
+            steeringOneEuro.MinCutoffHz = oneEuroMinCutoffHz;
+            steeringOneEuro.Beta = oneEuroBeta;
+            steeringOneEuro.DCutoffHz = oneEuroDCutoffHz;
+            SteeringDeg = steeringOneEuro.Filter(target, Time.fixedDeltaTime);
+            return;
+        }
 
         SteeringDeg = steeringSmoothTime > 0f
             ? Mathf.SmoothDamp(SteeringDeg, target, ref steeringVelocityRef,
@@ -472,6 +611,7 @@ public class BikeSensorProcessor : MonoBehaviour, IBikeInputSource
         EstimatedSpeedMps = 0f;
         EstimatedAccelMps2 = 0f;
         hasReceivedFirstPulse = false;
+        hasPreviousPacket = false;
     }
 
     // ------------------------------------------------------------

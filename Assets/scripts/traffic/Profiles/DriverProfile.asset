@@ -15,9 +15,9 @@ MonoBehaviour:
   speedFactorMean: 1
   speedFactorSd: 0.08
   speedFactorRange: {x: 0.8, y: 1.2}
-  timeHeadwayMean: 1.3
+  timeHeadwayMean: 1
   timeHeadwaySd: 0.2
-  timeHeadwayRange: {x: 0.8, y: 2}
+  timeHeadwayRange: {x: 0.7, y: 1.6}
   minGapMean: 2
   minGapSd: 0.3
   minGapRange: {x: 1.2, y: 3}
@@ -28,3 +28,10 @@ MonoBehaviour:
   comfortDecelSd: 0.3
   comfortDecelRange: {x: 1.3, y: 3}
   exponent: 4
+  criticalGapMean: 4.5
+  criticalGapSd: 0.6
+  criticalGapRange: {x: 3, y: 7}
+  minorStreetExtraGapS: 2
+  followBeforeOvertakeMean: 2
+  followBeforeOvertakeSd: 1
+  followBeforeOvertakeRange: {x: 0.5, y: 6}

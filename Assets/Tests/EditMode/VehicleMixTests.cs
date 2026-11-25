@@ -2,7 +2,7 @@
 // VehicleMixTests.cs
 // Vehiculos de 2026-11-04: geometria de vehiculos largos (corte del eje
 // trasero en curvas, radio por tres puntos), sorteo de colores con semilla y
-// eleccion de ruta filtrada (determinista y respetando el filtro).
+// catalogo de rutas (RouteChoiceModel), con y sin restriccion para vehiculos largos.
 // ============================================================
 
 using NUnit.Framework;
@@ -66,28 +66,41 @@ public class VehicleMixTests
     }
 
     [Test]
-    public void PickNext_Filtered_RespectsFilterAndUsesOneDraw()
+    public void RouteCatalog_FindsBothRoutes_WithoutRepeatingAnIntersection_AndRespectsFilter()
     {
-        var entry = MakeLane("Entry"); var straight = MakeLane("Straight"); var right = MakeLane("Right"); var left = MakeLane("Left");
+        // Anillo minimo: Entry entra a la interseccion A y puede girar a la derecha (rama este) o a la izquierda
+        // (rama oeste); las dos ramas llegan a la interseccion B y salen por Exit. Desde la rama este tambien se puede
+        // seguir derecho en B y volver a A (un ciclo que repite A y no debe contar).
+        var entry = MakeLane("Entry"); var aRight = MakeLane("I_A_S_Conn_Right_E"); var aLeft = MakeLane("I_A_S_Conn_Left_W");
+        var east = MakeLane("East"); var west = MakeLane("West");
+        var bFromEast = MakeLane("I_B_E_Conn_Right_N"); var bFromWest = MakeLane("I_B_W_Conn_Left_N");
+        var bLoop = MakeLane("I_B_E_Conn_Straight_W"); var back = MakeLane("Back"); var aLoop = MakeLane("I_A_E_Conn_Straight_W");
+        var exit = MakeLane("Exit"); var island = MakeLane("Island");
+        var all = new[] { entry, aRight, aLeft, east, west, bFromEast, bFromWest, bLoop, back, aLoop, exit, island };
         try
         {
-            SetNext(entry, straight, right, left);
-            var rng = new System.Random(3);
-            for (int i = 0; i < 200; i++)
-                Assert.That(entry.PickNext(rng, l => l != right), Is.Not.EqualTo(right));
+            SetNext(entry, aRight, aLeft);
+            SetNext(aRight, east); SetNext(aLeft, west);
+            SetNext(east, bFromEast, bLoop); SetNext(west, bFromWest);
+            SetNext(bFromEast, exit); SetNext(bFromWest, exit);
+            SetNext(bLoop, back); SetNext(back, aLoop); SetNext(aLoop, west);
+            System.Func<TrafficLane, string> inter = l => l.name.StartsWith("I_") ? l.name.Substring(0, 3) : null;
 
-            // Mismo numero de sorteos que PickNext: dos secuencias con la misma semilla quedan alineadas
-            var r1 = new System.Random(11); var r2 = new System.Random(11);
-            entry.PickNext(r1, l => l == straight);
-            entry.PickNext(r2);
-            Assert.That(r1.NextDouble(), Is.EqualTo(r2.NextDouble()));
+            var routes = RouteChoiceModel.EnumerateRoutes(entry, exit, inter);
+            Assert.That(routes.Count, Is.EqualTo(2));
+            Assert.That(routes[0], Is.EqualTo(new[] { entry, aRight, east, bFromEast, exit }));
+            Assert.That(routes[1], Is.EqualTo(new[] { entry, aLeft, west, bFromWest, exit }));
 
-            // Ningun destino permitido: elige entre todos (no se queda sin ruta)
-            Assert.That(entry.PickNext(new System.Random(1), l => false), Is.Not.Null);
+            // El bus no cabe en el giro a la izquierda: queda una sola ruta
+            var forBus = RouteChoiceModel.EnumerateRoutes(entry, exit, inter, l => l != aLeft);
+            Assert.That(forBus.Count, Is.EqualTo(1));
+            Assert.That(forBus[0][1], Is.EqualTo(aRight));
+
+            Assert.That(RouteChoiceModel.EnumerateRoutes(entry, island, inter), Is.Empty);
         }
         finally
         {
-            foreach (var l in new[] { entry, straight, right, left }) Object.DestroyImmediate(l.gameObject);
+            foreach (var l in all) Object.DestroyImmediate(l.gameObject);
         }
     }
 }

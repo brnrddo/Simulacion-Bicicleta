@@ -42,6 +42,31 @@ public class TrafficRulesTests
     }
 
     [Test]
+    public void AnticipatedTimeToReach_CountsBrakingBeforeTheTurn()
+    {
+        // 10 m/s, conector de 4 m/s que empieza a 50 m, punto 6 m dentro (56 m), b = 2 m/s2:
+        // frena en (100 - 16) / 4 = 21 m; 29 m a 10 m/s + 21 m a 7 m/s de media + 6 m a 4 m/s
+        float expected = 29f / 10f + 2f * 21f / 14f + 6f / 4f;
+        Assert.That(TrafficRules.AnticipatedTimeToReach(56f, 50f, 10f, 4f, 2f), Is.EqualTo(expected).Within(1e-4f));
+
+        // Siempre al menos lo que da la velocidad actual
+        Assert.That(TrafficRules.AnticipatedTimeToReach(56f, 50f, 10f, 4f, 2f), Is.GreaterThan(TrafficRules.TimeToReach(56f, 10f)));
+
+        // Ya mas lento que el conector: igual a TimeToReach
+        Assert.That(TrafficRules.AnticipatedTimeToReach(30f, 20f, 3f, 4f, 2f), Is.EqualTo(10f).Within(1e-4f));
+
+        // Muy cerca para frenar comodo: llega al conector a 4 m/s con desaceleracion constante
+        Assert.That(TrafficRules.AnticipatedTimeToReach(16f, 10f, 10f, 4f, 2f), Is.EqualTo(2f * 10f / 14f + 6f / 4f).Within(1e-4f));
+
+        // Ya dentro del conector (0 m hasta el tramo lento): todo a la velocidad del conector
+        Assert.That(TrafficRules.AnticipatedTimeToReach(6f, 0f, 4f, 4f, 2f), Is.EqualTo(1.5f).Within(1e-4f));
+
+        // Detenido: mismo criterio que TimeToReach
+        Assert.That(float.IsPositiveInfinity(TrafficRules.AnticipatedTimeToReach(30f, 10f, 0f, 4f, 2f)));
+        Assert.That(TrafficRules.AnticipatedTimeToReach(2f, 1f, 0f, 4f, 2f), Is.EqualTo(0f));
+    }
+
+    [Test]
     public void Priority_MinorYieldsToMajor_LeftYieldsToStraightAndRight()
     {
         var P = ApproachControl.Priority;
