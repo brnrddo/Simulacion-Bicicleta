@@ -11,12 +11,14 @@
 // Todo el azar pasa por System.Random con semilla: mismo seed + mismo
 // comportamiento del ciclista = mismo trafico.
 // Va en un objeto "Traffic" de la escena (uno solo).
-// El nivel de trafico de toda la escena se ajusta con flowMultiplier: escala el flujo
-// de los spawners y la cantidad objetivo de autos (vehiclesPerLevel x flowMultiplier).
+// La demanda la fija la matriz origen-destino (OdDemand, en el mismo objeto): cada
+// auto nace con un destino y sigue la ruta mas rapida hasta el (E2; E3 la reemplaza
+// por la eleccion logit entre rutas).
 // ============================================================
 
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using UnityEngine;
 
 [DefaultExecutionOrder(20)]  // despues de BicycleController (0)
@@ -25,17 +27,9 @@ public class TrafficManager : MonoBehaviour
     [Header("Reproducibilidad")]
     [SerializeField] private int masterSeed = 12345;
 
-    [Header("Nivel de trafico")]
-    [Tooltip("Multiplica el flujo de TODOS los spawners (1 = flujos nominales, 0.5 = la mitad, 2 = el doble). " +
-             "Cambiar solo este valor para correr la misma escena con distintos niveles de trafico.")]
-    [SerializeField, Min(0f)] private float flowMultiplier = 1f;
+    [Header("Vehiculos")]
     [Tooltip("Maximo de buses circulando a la vez. Si un spawner sortea un bus y ya estan todos, sortea otro vehiculo.")]
     [SerializeField, Min(0)] private int maxBuses = 2;
-    [Tooltip("Autos objetivo en la red con Flow Multiplier = 1. Objetivo = esto x Flow Multiplier. " +
-             "Los spawners no generan por encima del objetivo.")]
-    [SerializeField, Min(0)] private int vehiclesPerLevel = 30;
-    [Tooltip("Durante el precalentamiento los spawners generan este multiplo de su flujo, para llenar la red antes de empezar.")]
-    [SerializeField, Min(1f)] private float warmUpFlowBoost = 3f;
 
     [Header("Ciclista")]
     [SerializeField] private BicycleController bike;
@@ -46,8 +40,9 @@ public class TrafficManager : MonoBehaviour
     [Header("Simulacion")]
     [Tooltip("Distancia maxima a la que un auto busca un vehiculo adelante (m).")]
     [SerializeField] private float lookAheadM = 150f;
-    [Tooltip("Segundos de trafico simulados antes de empezar, para que la calle no arranque vacia.")]
-    [SerializeField] private float warmUpSeconds = 60f;
+    [Tooltip("Segundos de trafico simulados antes de empezar, para que la calle no arranque vacia. Sin refuerzo de " +
+             "flujo: con 180 s hay autos en todas las rutas y los flujos ya son los de la matriz.")]
+    [SerializeField, Min(0f)] private float warmUpSeconds = 180f;
     [Tooltip("Tras el precalentamiento, se eliminan los autos a menos de esta distancia del ciclista.")]
     [SerializeField] private float clearRadiusAroundBikeM = 20f;
 
@@ -107,17 +102,8 @@ public class TrafficManager : MonoBehaviour
     public int MasterSeed => masterSeed;
     public AmbientOvertakingMode OvertakingMode { get => overtakingMode; set => overtakingMode = value; }
 
-    /// <summary>Multiplicador global del flujo. Setearlo antes de Start para que aplique tambien al precalentamiento.</summary>
-    public float FlowMultiplier
-    {
-        get => flowMultiplier;
-        set => flowMultiplier = Mathf.Max(0f, value);
-    }
-
-    /// <summary>Cantidad de autos objetivo segun el nivel de trafico.</summary>
-    public int TargetVehicles => Mathf.RoundToInt(vehiclesPerLevel * flowMultiplier);
     public bool IsWarmingUp { get; private set; }
-    public float SpawnFlowBoost => IsWarmingUp ? warmUpFlowBoost : 1f;
+    public OdDemand Demand => demand;
 
     public float BikeHalfLengthM => bikeLengthM * 0.5f;
     public float BikeSpeedMps => bike != null ? bike.CurrentSpeedMps : 0f;
@@ -163,7 +149,10 @@ public class TrafficManager : MonoBehaviour
     private readonly Dictionary<TrafficLane, List<float>> pedOnLane = new Dictionary<TrafficLane, List<float>>();
     private RiderRoute riderRoute;
 
-    private System.Random routingRng;
+    private OdDemand demand;
+    // Ruta mas rapida por (carril de partida, carril de destino, vehiculo largo). Se comparte entre autos.
+    private readonly Dictionary<(TrafficLane, TrafficLane, bool), List<TrafficLane>> routeCache =
+        new Dictionary<(TrafficLane, TrafficLane, bool), List<TrafficLane>>();
     private System.Random startUpRng;
     private System.Random colorRng;
     private System.Random overtakeRng;
@@ -189,7 +178,8 @@ public class TrafficManager : MonoBehaviour
         spawners.AddRange(FindObjectsByType<TrafficSpawner>(FindObjectsSortMode.None));
         spawners.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
 
-        routingRng = CreateRng(0);
+        demand = GetComponent<OdDemand>();
+        if (demand == null) Debug.LogError("[TrafficManager] Falta OdDemand en el objeto del trafico: no se generan autos.");
         startUpRng = CreateRng(1000);
         overtakeRng = CreateRng(2000);
         colorRng = CreateRng(4000);   // colores de carroceria: no altera las otras secuencias
@@ -243,6 +233,8 @@ public class TrafficManager : MonoBehaviour
 
     private void Start()
     {
+        // La matriz origen-destino fija el flujo y los destinos de cada spawner (sin matriz valida, flujo 0)
+        if (demand != null) demand.ConfigureSpawners(spawners);
         foreach (var sp in spawners)
         {
             if (sp.IsValid(out string err)) sp.Init(this);
@@ -250,10 +242,12 @@ public class TrafficManager : MonoBehaviour
         }
 
         if (warmUpSeconds > 0f) WarmUp();
+        if (demand != null) demand.ResetCounters(simTimeS);
 
         EventBus.Publish("traffic_start", "traffic", string.Format(CultureInfo.InvariantCulture,
-            "seed={0};flow_multiplier={1};target_vehicles={2};lanes={3};spawners={4};intersections={5};vehicles_after_warmup={6}",
-            masterSeed, flowMultiplier, TargetVehicles, lanes.Count, spawners.Count, intersections.Count, vehicles.Count));
+            "seed={0};od_source={1};od_total_vph={2:F1};lanes={3};spawners={4};intersections={5};vehicles_after_warmup={6};warmup_s={7:F0}",
+            masterSeed, demand != null ? demand.Source : "", spawners.Sum(s => s.FlowVehPerHour),
+            lanes.Count, spawners.Count, intersections.Count, vehicles.Count, warmUpSeconds));
 
         foreach (var ic in intersections)
         {
@@ -314,6 +308,7 @@ public class TrafficManager : MonoBehaviour
     {
         simTimeS += dt;
         foreach (var ic in intersections) ic.Tick(dt);
+        if (!IsWarmingUp && demand != null) demand.Tick(dt, simTimeS);
 
         UpdateBikeProjection();
         UpdatePedestrianProjection();
@@ -361,13 +356,20 @@ public class TrafficManager : MonoBehaviour
                 if (v.CommittedConnector == from) v.CommittedConnector = null;
                 if (v.StoppedAtLineOf == from) v.StoppedAtLineOf = null;
 
-                if (v.NextLane == null) { toRemove.Add(v); break; }
+                if (v.NextLane == null)
+                {
+                    // Fin de su ruta: llego a su destino y sale de la red
+                    if (demand != null && v.Destination != null && from == v.Destination.Lane) demand.OnArrived(v.Origin, v.Destination.NodeId);
+                    toRemove.Add(v);
+                    break;
+                }
 
                 v.PrevLane = from;
+                v.RouteIndex++;
                 v.Lane = v.NextLane;
                 v.S = overflow;
                 v.NextLane = v.NextNextLane;
-                v.NextNextLane = v.NextLane != null ? PickNextFor(v, v.NextLane) : null;
+                v.NextNextLane = v.RouteAt(v.RouteIndex + 2);
                 v.Lane.Vehicles.Insert(0, v);  // recien entrado: es el de S mas bajo
 
                 if (v.Lane.IsConnector)
@@ -614,11 +616,23 @@ public class TrafficManager : MonoBehaviour
     public float MaxVehicleLengthM => maxVehicleLengthM;
     public bool LongVehicleFits(TrafficLane connector) => !longVehicleChecked || longVehicleConnectors.Contains(connector);
 
-    /// <summary>Elige el carril siguiente; un vehiculo largo solo entre los conectores donde cabe.</summary>
-    private TrafficLane PickNextFor(TrafficVehicle v, TrafficLane lane) =>
-        v.LengthM > LongVehicleMinLengthM && longVehicleChecked
-            ? lane.PickNext(routingRng, c => !c.IsConnector || longVehicleConnectors.Contains(c))
-            : lane.PickNext(routingRng);
+    private bool IsLong(TrafficVehicle prefab) => prefab.LengthM > LongVehicleMinLengthM && longVehicleChecked;
+
+    /// <summary>
+    /// Ruta mas rapida a flujo libre (largo / limite) de 'from' a 'to'; un vehiculo largo solo por los conectores
+    /// donde cabe. null si no hay. Las rutas se guardan y se comparten entre autos: no modificarlas.
+    /// </summary>
+    public List<TrafficLane> GetRoute(TrafficLane from, TrafficLane to, bool longVehicle)
+    {
+        var key = (from, to, longVehicle);
+        if (routeCache.TryGetValue(key, out var route)) return route;
+        route = RoutePlanner.Shortest(from, to, l => l.LengthM / Mathf.Max(l.SpeedLimitMps, 0.1f),
+                                      longVehicle ? (System.Predicate<TrafficLane>)(c => !c.IsConnector || longVehicleConnectors.Contains(c)) : null);
+        routeCache[key] = route;
+        return route;
+    }
+
+    public bool HasRoute(TrafficLane from, TrafficLane to, TrafficVehicle prefab) => GetRoute(from, to, IsLong(prefab)) != null;
 
     /// <summary>
     /// Conectores donde cabe un vehiculo largo sin pisar la vereda: en cada punto, la distancia del eje a la vereda
@@ -669,7 +683,13 @@ public class TrafficManager : MonoBehaviour
         }
     }
 
-    /// <summary>Un vehiculo cuyo centro ya salio de 'conn' tiene todavia la cola antes de sEnd (sigue ocupando la zona).</summary>
+    /// <summary>
+    /// Un vehiculo cuyo centro ya salio de 'conn' tiene todavia la cola antes de sEnd (sigue ocupando la zona).
+    /// Solo cuentan los que salieron de 'conn': en una convergencia (dos giros que terminan en el mismo carril), el
+    /// carril de salida tambien tiene a los que vienen del otro conector. Antes se contaban todos, y un auto que
+    /// doblaba con prioridad se detenia por la cola del auto de adelante que habia doblado igual que el; el que
+    /// cedia el paso esperaba a ese auto detenido y los dos quedaban esperandose (2026-11-25, giro a C3).
+    /// </summary>
     private static bool TailInZone(TrafficLane conn, float sEnd)
     {
         foreach (var nl in conn.NextLanes)
@@ -679,6 +699,7 @@ public class TrafficManager : MonoBehaviour
             {
                 float rear = o.S - o.LengthM * 0.5f;
                 if (rear >= 0f) break;
+                if (o.PrevLane != conn) continue;
                 if (conn.LengthM + rear < sEnd + 0.5f) return true;
             }
         }
@@ -1029,7 +1050,7 @@ public class TrafficManager : MonoBehaviour
     // Alta y baja de vehiculos
     // ------------------------------------------------------------
     public TrafficVehicle SpawnVehicle(TrafficVehicle prefab, TrafficLane lane, float s, float speed,
-                                       IdmParams p, float speedFactor)
+                                       IdmParams p, float speedFactor, string origin, OdNode destination)
     {
         TrafficVehicle v;
         if (pools.TryGetValue(prefab, out var pool) && pool.Count > 0)
@@ -1050,8 +1071,15 @@ public class TrafficManager : MonoBehaviour
         v.Speed = speed;
         v.Params = p;
         v.SpeedFactor = speedFactor;
-        v.NextLane = PickNextFor(v, lane);
-        v.NextNextLane = v.NextLane != null ? PickNextFor(v, v.NextLane) : null;
+        v.Origin = origin ?? "";
+        v.Destination = destination;
+        v.Route = destination != null ? GetRoute(lane, destination.Lane, IsLong(prefab)) : null;
+        v.RouteIndex = 0;
+        if (v.Route == null || v.Route.Count == 0 || v.Route[0] != lane)
+            Debug.LogError($"[TrafficManager] {v.Label} sin ruta de {lane.name} a {(destination != null ? destination.NodeId : "?")}: sale al final del carril.");
+        v.NextLane = v.RouteAt(1);
+        v.NextNextLane = v.RouteAt(2);
+        if (demand != null && destination != null) demand.OnSpawned(v.Origin, destination.NodeId);
         if (v.RandomBodyColor) v.SetBodyColor(SampleBodyColor(colorRng));
         v.SnapPose();
 

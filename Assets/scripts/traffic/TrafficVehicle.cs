@@ -15,6 +15,7 @@
 // como un vehiculo real (importa en el bus de 12 m).
 // ============================================================
 
+using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
@@ -60,6 +61,16 @@ public class TrafficVehicle : MonoBehaviour
     /// <summary>Carril despues de NextLane: se elige con un paso mas de anticipacion para saber
     /// el giro antes de llegar al carril de llegada (que es corto).</summary>
     public TrafficLane NextNextLane { get; set; }
+
+    // Origen, destino y ruta (matriz origen-destino, E2). La ruta va del carril de aparicion al de salida;
+    // Lane = Route[RouteIndex]. Es una lista compartida entre autos: no modificarla.
+    public string Origin { get; set; } = "";
+    public OdNode Destination { get; set; }
+    public IReadOnlyList<TrafficLane> Route { get; set; }
+    public int RouteIndex { get; set; }
+    /// <summary>Carril i de la ruta (null fuera de ella).</summary>
+    public TrafficLane RouteAt(int i) => Route != null && i >= 0 && i < Route.Count ? Route[i] : null;
+
     public float S { get; set; }              // distancia del CENTRO del auto desde el inicio del carril
     public float Speed { get; set; }          // m/s
     public float Accel { get; set; }          // m/s2
@@ -119,6 +130,10 @@ public class TrafficVehicle : MonoBehaviour
         Lane = null;
         NextLane = null;
         PrevLane = null;
+        Origin = "";
+        Destination = null;
+        Route = null;
+        RouteIndex = 0;
         S = 0f;
         Speed = 0f;
         Accel = 0f;

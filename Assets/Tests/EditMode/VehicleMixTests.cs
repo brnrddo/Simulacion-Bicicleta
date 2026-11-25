@@ -2,7 +2,7 @@
 // VehicleMixTests.cs
 // Vehiculos de 2026-11-04: geometria de vehiculos largos (corte del eje
 // trasero en curvas, radio por tres puntos), sorteo de colores con semilla y
-// eleccion de ruta filtrada (determinista y respetando el filtro).
+// ruta mas rapida (RoutePlanner), con y sin restriccion para vehiculos largos.
 // ============================================================
 
 using NUnit.Framework;
@@ -66,28 +66,34 @@ public class VehicleMixTests
     }
 
     [Test]
-    public void PickNext_Filtered_RespectsFilterAndUsesOneDraw()
+    public void RoutePlanner_TakesCheapestRoute_AndRespectsFilter()
     {
-        var entry = MakeLane("Entry"); var straight = MakeLane("Straight"); var right = MakeLane("Right"); var left = MakeLane("Left");
+        // Entry -> (Corta -> Medio) o (Larga) -> Salida. Costos por nombre (s a flujo libre).
+        var entry = MakeLane("Entry"); var shortA = MakeLane("ShortA"); var shortB = MakeLane("ShortB");
+        var longC = MakeLane("LongC"); var exit = MakeLane("Exit"); var island = MakeLane("Island");
         try
         {
-            SetNext(entry, straight, right, left);
-            var rng = new System.Random(3);
-            for (int i = 0; i < 200; i++)
-                Assert.That(entry.PickNext(rng, l => l != right), Is.Not.EqualTo(right));
+            SetNext(entry, shortA, longC);
+            SetNext(shortA, shortB);
+            SetNext(shortB, exit);
+            SetNext(longC, exit);
+            var cost = new System.Collections.Generic.Dictionary<TrafficLane, float>
+            { [entry] = 5f, [shortA] = 3f, [shortB] = 3f, [longC] = 20f, [exit] = 5f, [island] = 1f };
 
-            // Mismo numero de sorteos que PickNext: dos secuencias con la misma semilla quedan alineadas
-            var r1 = new System.Random(11); var r2 = new System.Random(11);
-            entry.PickNext(r1, l => l == straight);
-            entry.PickNext(r2);
-            Assert.That(r1.NextDouble(), Is.EqualTo(r2.NextDouble()));
+            var r = RoutePlanner.Shortest(entry, exit, l => cost[l]);
+            Assert.That(r, Is.EqualTo(new[] { entry, shortA, shortB, exit }));
 
-            // Ningun destino permitido: elige entre todos (no se queda sin ruta)
-            Assert.That(entry.PickNext(new System.Random(1), l => false), Is.Not.Null);
+            // Si un tramo no se puede usar (p. ej. el bus no cabe), toma la otra ruta
+            var rFiltered = RoutePlanner.Shortest(entry, exit, l => cost[l], l => l != shortA);
+            Assert.That(rFiltered, Is.EqualTo(new[] { entry, longC, exit }));
+
+            // Sin camino: null. Mismo carril: ruta de un solo carril.
+            Assert.That(RoutePlanner.Shortest(entry, island, l => cost[l]), Is.Null);
+            Assert.That(RoutePlanner.Shortest(exit, exit, l => cost[l]), Is.EqualTo(new[] { exit }));
         }
         finally
         {
-            foreach (var l in new[] { entry, straight, right, left }) Object.DestroyImmediate(l.gameObject);
+            foreach (var l in new[] { entry, shortA, shortB, longC, exit, island }) Object.DestroyImmediate(l.gameObject);
         }
     }
 }

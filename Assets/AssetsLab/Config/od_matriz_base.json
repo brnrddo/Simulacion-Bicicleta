@@ -1,0 +1,9 @@
+{
+  "_comentario": "Matriz origen-destino (veh/h) del dibujo del 2026-11-13. Cada celda se sortea con N(media, sd) en cada repeticion. La sd es provisoria (10 % de la media): falta que Bernardo la confirme.",
+  "pairs": [
+    { "from": "C2", "to": "C3", "meanVehPerHour": 500, "sdVehPerHour": 50 },
+    { "from": "C2", "to": "C1", "meanVehPerHour": 10,  "sdVehPerHour": 1 },
+    { "from": "C4", "to": "C1", "meanVehPerHour": 500, "sdVehPerHour": 50 },
+    { "from": "C4", "to": "C3", "meanVehPerHour": 10,  "sdVehPerHour": 1 }
+  ]
+}
